@@ -364,7 +364,7 @@ const index = async () => {
 		dom.h2('Domains'),
 		(domains || []).length === 0 ? box(red, 'No domains') :
 		dom.ul(
-			(domains || []).map(d => dom.li(dom.a(attr.href('#domains/'+domainName(d.Domain)), domainString(d.Domain)), d.Disabled ? ' (disabled)' : [])),
+			(domains || []).map(d => dom.li(dom.a(attr.href('#domains/'+domainName(d.Domain)), domainString(d.Domain)), d.Disabled ? ' (disabled)' : [], d.SendOnly ? ' (send-only)' : [])),
 		),
 		dom.br(),
 		dom.h2('Add domain'),
@@ -1399,6 +1399,7 @@ const domain = async (d: string) => {
 			'Domain ' + domainString(dnsdomain),
 		),
 		domainConfig.Disabled ? dom.p(box(yellow, 'Warning: Domain is disabled. Incoming/outgoing messages involving this domain are rejected and ACME for new TLS certificates is disabled.')) : [],
+		domainConfig.SendOnly ? dom.p(box(yellow, 'Domain is send-only. This host does not receive email for the domain: messages to its addresses are delivered to its MX hosts, incoming deliveries are rejected.')) : [],
 		dom.ul(
 			dom.li(dom.a('Required DNS records', attr.href('#domains/' + d + '/dnsrecords'))),
 			dom.li(dom.a('Check current actual DNS records and domain configuration', attr.href('#domains/' + d + '/dnscheck'))),
@@ -1982,6 +1983,23 @@ const domain = async (d: string) => {
 		dom.ul(
 			dom.li(link('https://internet.nl/mail/'+dnsdomain.ASCII+'/', 'Check configuration at internet.nl')),
 		),
+		dom.br(),
+
+		dom.h2('Send-only'),
+		dom.p('Send-only domains are used for sending email only, e.g. for transactional email, or for a domain whose incoming email is handled by other mail servers. Addresses at the domain can still be used as From address and for logging in, and messages are DKIM-signed. Send-only domains cannot have MTA-STS, TLSRPT, aliases or a catchall address, and DMARC reports must be sent to an address at another domain.'),
+		domainConfig.SendOnly ?
+			dom.clickbutton('Make domain receive email', async function click(e: {target: HTMLButtonElement}) {
+				if (window.confirm('Are you sure you want this host to receive email for this domain? Messages to addresses at this domain will be delivered locally. Ensure the MX records of the domain point to this host.')) {
+					await check(e.target, client.DomainSendOnlySave(d, false))
+					window.location.reload()
+				}
+			}) :
+			dom.clickbutton('Make domain send-only', async function click(e: {target: HTMLButtonElement}) {
+				if (window.confirm('Are you sure you want to make this domain send-only? Messages to addresses at this domain will no longer be delivered locally, but to the MX hosts of the domain, and incoming deliveries will be rejected.')) {
+					await check(e.target, client.DomainSendOnlySave(d, true))
+					window.location.reload()
+				}
+			}),
 		dom.br(),
 
 		dom.h2('Danger'),

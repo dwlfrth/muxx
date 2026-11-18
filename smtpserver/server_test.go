@@ -545,6 +545,114 @@ test email
 	})
 }
 
+// Test send-only domains: addresses are remote for submission, incoming deliveries
+// are rejected, and addresses can still be used for login, as message From and
+// SMTP MAIL FROM address, with DKIM signing.
+func TestSendOnly(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"example.org.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"example.org."},
+		},
+	}
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
+	defer ts.close()
+
+	// Make mox2.example send-only, with DKIM signing. Account mjl has address
+	// mjl@mox2.example.
+	dom, _ := mox.Conf.Domain(dns.Domain{ASCII: "mox2.example"})
+	sel := config.Selector{
+		HashEffective:    "sha256",
+		HeadersEffective: []string{"From", "To", "Subject"},
+		Key:              ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)), // Fake key, don't use for real.
+		Domain:           dns.Domain{ASCII: "testsel"},
+	}
+	dom.DKIM = config.DKIM{
+		Selectors: map[string]config.Selector{"testsel": sel},
+		Sign:      []string{"testsel"},
+	}
+	dom.SendOnly = true
+	mox.Conf.Dynamic.Domains["mox2.example"] = dom
+	pubkey := sel.Key.Public().(ed25519.PublicKey)
+	resolver.TXT = map[string][]string{
+		"testsel._domainkey.mox2.example.": {"v=DKIM1;k=ed25519;p=" + base64.StdEncoding.EncodeToString(pubkey)},
+	}
+
+	// Incoming delivery to an address at a send-only domain is rejected, even though
+	// the address is configured for an account.
+	ts.run(func(client *smtpclient.Client) {
+		mailFrom := "remote@example.org"
+		rcptTo := "mjl@mox2.example"
+		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
+	})
+	ts.checkCount("Inbox", 0)
+
+	ts.submission = true
+	ts.user = "mjl@mox2.example" // Login with address at send-only domain still works.
+	ts.pass = password0
+
+	queueCount := func() int {
+		t.Helper()
+		msgs, err := queue.List(ctxbg, queue.Filter{}, queue.Sort{})
+		tcheck(t, err, "listing queue")
+		return len(msgs)
+	}
+
+	// Submission to addresses at a send-only domain, both configured for an account
+	// and unknown, are queued for remote delivery, not delivered locally.
+	for _, rcptTo := range []string{"mjl@mox2.example", "unknown@mox2.example"} {
+		n := queueCount()
+		ts.run(func(client *smtpclient.Client) {
+			mailFrom := "mjl@mox.example"
+			err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(submitMessage)), strings.NewReader(submitMessage), false, false, false)
+			tcheck(t, err, "submit to send-only domain")
+		})
+		tcompare(t, queueCount(), n+1)
+		ts.checkCount("Inbox", 0)
+	}
+
+	// Address at send-only domain can be used as SMTP MAIL FROM and message From, and
+	// the message is DKIM-signed for the send-only domain.
+	msg := strings.ReplaceAll(`From: <mjl@mox2.example>
+To: <remote@example.org>
+Subject: test
+Message-Id: <test@mox2.example>
+
+test email
+`, "\n", "\r\n")
+	ts.run(func(client *smtpclient.Client) {
+		err := client.Deliver(ctxbg, "mjl@mox2.example", "remote@example.org", int64(len(msg)), strings.NewReader(msg), false, false, false)
+		tcheck(t, err, "submit from send-only domain")
+	})
+	msgs, err := queue.List(ctxbg, queue.Filter{}, queue.Sort{})
+	tcheck(t, err, "listing queue")
+	sort.Slice(msgs, func(i, j int) bool {
+		return msgs[i].ID > msgs[j].ID
+	})
+	tcompare(t, msgs[0].Sender().String(), "mjl@mox2.example")
+	f, err := queue.OpenMessage(ctxbg, msgs[0].ID)
+	tcheck(t, err, "open message in queue")
+	defer f.Close()
+	results, err := dkim.Verify(ctxbg, pkglog.Logger, resolver, false, dkim.DefaultPolicy, f, false)
+	tcheck(t, err, "verifying dkim message")
+	tcompare(t, len(results), 1)
+	tcompare(t, results[0].Status, dkim.StatusPass)
+	tcompare(t, results[0].Sig.Domain.ASCII, "mox2.example")
+
+	// A send-only domain that is also disabled gets the temporary error for disabled
+	// domains.
+	ddom, _ := mox.Conf.Domain(dns.Domain{ASCII: "disabled.example"})
+	ddom.SendOnly = true
+	mox.Conf.Dynamic.Domains["disabled.example"] = ddom
+	ts.run(func(client *smtpclient.Client) {
+		err := client.Deliver(ctxbg, "mjl@mox.example", "mjl@disabled.example", int64(len(submitMessage)), strings.NewReader(submitMessage), false, false, false)
+		ts.smtpErr(err, &smtpclient.Error{Permanent: false, Code: smtp.C450MailboxUnavail, Secode: smtp.SeMailbox2Disabled1})
+	})
+}
+
 // Test delivery from external MTA.
 func TestDelivery(t *testing.T) {
 	resolver := dns.MockResolver{

@@ -464,6 +464,9 @@ func unptr[T any](l []*T) []T {
 	return r
 }
 
+// Instruction for checks that are only relevant for domains that receive email.
+const sendOnlyNotApplicable = "Not applicable: domain is send-only, this host does not receive email for the domain."
+
 func checkDomain(ctx context.Context, resolver dns.Resolver, dialer *net.Dialer, domainName string) (r CheckResult) {
 	log := pkglog.WithContext(ctx)
 
@@ -721,12 +724,24 @@ EOF
 			if isUnspecifiedNAT {
 				continue
 			}
+			if domConf.SendOnly {
+				if len(ourIPs) > 0 {
+					addf(&r.MX.Errors, "Domain is send-only, but mx %q points to IPs of this host: %v. Incoming email for the domain is rejected by this host.", mx.Host, ourIPs)
+				}
+				continue
+			}
 			if len(ourIPs) == 0 {
 				addf(&r.MX.Errors, "None of the IPs that mx %q points to is ours: %v", mx.Host, notOurIPs)
 			} else if len(notOurIPs) > 0 {
 				addf(&r.MX.Errors, "Some of the IPs that mx %q points to are not ours: %v", mx.Host, notOurIPs)
 			}
 
+		}
+		if domConf.SendOnly {
+			r.MX.Instructions = []string{
+				"Domain is send-only, this host does not receive email for the domain. Ensure the DNS MX records of the domain point to the mail servers that receive email for the domain, not to this host.",
+			}
+			return
 		}
 		r.MX.Instructions = []string{
 			fmt.Sprintf("Ensure a DNS MX record like the following exists:\n\n\t%s MX 10 %s\n\nWithout the trailing dot, the name would be interpreted as relative to the domain.", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+"."),
@@ -739,6 +754,12 @@ EOF
 	go func() {
 		defer logPanic(ctx)
 		defer wg.Done()
+
+		// The MX hosts of send-only domains are other mail servers.
+		if domConf.SendOnly {
+			addf(&r.TLS.Instructions, "%s", sendOnlyNotApplicable)
+			return
+		}
 
 		// MTA-STS, autoconfig, autodiscover are checked in their sections.
 
@@ -839,6 +860,12 @@ EOF
 	go func() {
 		defer logPanic(ctx)
 		defer wg.Done()
+
+		// The MX hosts of send-only domains are other mail servers.
+		if domConf.SendOnly {
+			addf(&r.DANE.Instructions, "%s", sendOnlyNotApplicable)
+			return
+		}
 
 		daneRecords := func(l config.Listener) map[string]struct{} {
 			if l.TLS == nil {
@@ -1005,7 +1032,8 @@ EOF
 			for _, ip := range ips {
 				checkSPFIP(ip)
 			}
-			if !isHost {
+			// The MX hosts of send-only domains are other mail servers.
+			if !isHost && !domConf.SendOnly {
 				spfr.Directives = append(spfr.Directives, spf.Directive{Mechanism: "mx"})
 			}
 
@@ -1197,6 +1225,12 @@ EOF
 		defer logPanic(ctx)
 		defer wg.Done()
 
+		// TLSRPT for the domain is for reporting about incoming email.
+		if !isHost && domConf.SendOnly {
+			addf(&result.Instructions, "%s", sendOnlyNotApplicable)
+			return
+		}
+
 		record, txt, err := tlsrpt.Lookup(ctx, log.Logger, resolver, dom)
 		if err != nil {
 			addf(&result.Errors, "Looking up TLSRPT record for domain %s: %s", dom, err)
@@ -1283,6 +1317,11 @@ HostTLSRPT:
 	go func() {
 		defer logPanic(ctx)
 		defer wg.Done()
+
+		if domConf.SendOnly {
+			addf(&r.MTASTS.Instructions, "%s", sendOnlyNotApplicable)
+			return
+		}
 
 		// The admin has explicitly disabled mta-sts, keep warning about it.
 		if domConf.MTASTS == nil {
@@ -1376,6 +1415,11 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 	go func() {
 		defer logPanic(ctx)
 		defer wg.Done()
+
+		if domConf.SendOnly {
+			addf(&r.SRVConf.Instructions, "%s", sendOnlyNotApplicable)
+			return
+		}
 
 		type srvReq struct {
 			name string
@@ -1479,6 +1523,11 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 		defer logPanic(ctx)
 		defer wg.Done()
 
+		if domConf.SendOnly {
+			addf(&r.Autoconf.Instructions, "%s", sendOnlyNotApplicable)
+			return
+		}
+
 		if domConf.ClientSettingsDomain != "" {
 			addf(&r.Autoconf.Instructions, "Ensure a DNS CNAME record like the following exists:\n\n\t%s CNAME %s\n\nNote: the trailing dot is relevant, it makes the host name absolute instead of relative to the domain name.", domConf.ClientSettingsDNSDomain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 
@@ -1522,6 +1571,11 @@ When enabling MTA-STS, or updating a policy, always update the policy first (thr
 	go func() {
 		defer logPanic(ctx)
 		defer wg.Done()
+
+		if domConf.SendOnly {
+			addf(&r.Autodiscover.Instructions, "%s", sendOnlyNotApplicable)
+			return
+		}
 
 		addf(&r.Autodiscover.Instructions, "Ensure DNS records like the following exist:\n\n\t_autodiscover._tcp.%s SRV 0 1 443 %s\n\tautoconfig.%s CNAME %s\n\nNote: the trailing dots are relevant, it makes the host names absolute instead of relative to the domain name.", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".", domain.ASCII+".", mox.Conf.Static.HostnameDomain.ASCII+".")
 
@@ -2741,6 +2795,16 @@ func (Admin) DomainDisabledSave(ctx context.Context, domainName string, disabled
 		return nil
 	})
 	xcheckf(ctx, err, "saving disabled setting for domain")
+}
+
+// DomainSendOnlySave saves the SendOnly setting for a domain. A send-only domain
+// does not receive email on this host.
+func (Admin) DomainSendOnlySave(ctx context.Context, domainName string, sendOnly bool) {
+	err := admin.DomainSave(ctx, domainName, func(d *config.Domain) error {
+		d.SendOnly = sendOnly
+		return nil
+	})
+	xcheckf(ctx, err, "saving send-only setting for domain")
 }
 
 func xparseAddress(ctx context.Context, lp, domain string) smtp.Address {

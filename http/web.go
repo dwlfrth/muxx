@@ -855,7 +855,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 				return true
 			}
 			dc, ok := mox.Conf.Domain(dom)
-			return ok && !dc.ReportsOnly
+			return ok && !dc.ReportsOnly && !dc.SendOnly
 		}
 		srv.SystemHandle("autoconfig", autoconfigMatch, "/mail/config-v1.1.xml", mox.SafeHeaders(http.HandlerFunc(autoconfHandle)))
 		srv.SystemHandle("autodiscover", autoconfigMatch, "/autodiscover/autodiscover.xml", mox.SafeHeaders(http.HandlerFunc(autodiscoverHandle)))
@@ -920,7 +920,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 			for _, name := range mox.Conf.Domains() {
 				if dom, err := dns.ParseDomain(name); err != nil {
 					pkglog.Errorx("parsing domain from config", err)
-				} else if d, _ := mox.Conf.Domain(dom); d.ReportsOnly || d.Disabled {
+				} else if d, _ := mox.Conf.Domain(dom); d.ReportsOnly || d.SendOnly || d.Disabled {
 					// Do not gather autoconfig name if we aren't accepting email for this domain or when it is disabled.
 					continue
 				}
