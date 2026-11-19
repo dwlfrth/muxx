@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -526,6 +527,20 @@ func TestDomainSendOnly(t *testing.T) {
 	})
 	// Regular addresses are fine, for use as message From address.
 	api.AddressAdd(ctxbg, "mjl@sendonly.example", "mjl")
+
+	// The host name of an SMTP listener must receive email too, like the host name
+	// of the mail server.
+	origListeners := mox.Conf.Static.Listeners
+	listeners := maps.Clone(origListeners)
+	l := listeners["local"]
+	l.SMTP.Enabled = true
+	l.HostnameDomain = dns.Domain{ASCII: "sendonly.example"}
+	listeners["local"] = l
+	func() {
+		mox.Conf.Static.Listeners = listeners
+		defer func() { mox.Conf.Static.Listeners = origListeners }()
+		tneedErrorMsg(t, "send-only domain cannot be the hostname of an smtp listener", func() { api.DomainSendOnlySave(ctxbg, "sendonly.example", true) })
+	}()
 
 	// DNS records for a send-only domain have no records for incoming email.
 	hasRecord := func(records []string, substr string) bool {
