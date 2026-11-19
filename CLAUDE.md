@@ -54,6 +54,12 @@ the checklist when moving the project, e.g. to a self-hosted GitLab.
   --delete <branch>`.
 - GitHub: default branch `main`. Never merge on GitHub; its `main` comes only
   from the mirror.
+- GitHub ruleset `main: no deletion or force push` on `main`, with an empty
+  bypass list: it blocks deleting `main` and rewriting its history, and lets
+  normal pushes through, so the mirror is unaffected. A rule that blocks pushes
+  (requiring a pull request, restricting updates) would block the mirror too:
+  its token acts as the account that owns it, so a bypass for the mirror would
+  exempt that account entirely.
 
 ## Gates
 
