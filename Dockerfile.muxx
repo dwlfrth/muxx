@@ -1,0 +1,37 @@
+# The muxx release image, see MUXX.md. A copy of upstream's Dockerfile, with:
+# the release tag as build variable, git and the repository for the version
+# stamp (see Dockerfile.muxx.dockerignore), the Go version CI tests with, and
+# the muxx names.
+FROM golang:1.27-alpine AS build
+RUN apk add --no-cache git
+WORKDIR /build
+COPY . .
+ARG DISTRIBUTION
+RUN test -n "$DISTRIBUTION" || { echo "build argument DISTRIBUTION is required, the release tag, e.g. muxx-202611191730" >&2; exit 1; }
+RUN GOPROXY=off CGO_ENABLED=0 go build -trimpath -o /muxx -ldflags "-X github.com/mjl-/mox/moxvar.Distribution=$DISTRIBUTION"
+
+# Using latest may break at some point, but will hopefully be convenient most of the time.
+FROM alpine:latest
+WORKDIR /muxx
+COPY --from=build /muxx /bin/muxx
+
+RUN apk add --no-cache tzdata
+
+# SMTP for incoming message delivery.
+EXPOSE 25/tcp
+# SMTP/submission with TLS.
+EXPOSE 465/tcp
+# SMTP/submission without initial TLS.
+EXPOSE 587/tcp
+# HTTP for internal account and admin pages.
+EXPOSE 80/tcp
+# HTTPS for ACME (Let's Encrypt), MTA-STS and autoconfig.
+EXPOSE 443/tcp
+# IMAP with TLS.
+EXPOSE 993/tcp
+# IMAP without initial TLS.
+EXPOSE 143/tcp
+# Prometheus metrics.
+EXPOSE 8010/tcp
+
+CMD ["/bin/muxx", "serve"]

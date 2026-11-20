@@ -32,7 +32,8 @@ that run muxx lives in the private `dotfiles` repo.
 ## Branches
 
 - `main` is upstream plus the files only this copy has (`CLAUDE.md`,
-  `MUXX.md`, `.github/README.md`, `.gitlab-ci.yml`). Changes reach it only
+  `MUXX.md`, `.github/README.md`, `.gitlab-ci.yml`, `Dockerfile.muxx` and its
+  `.dockerignore`, `.github/workflows/muxx-image.yml`). Changes reach it only
   through a merge request on GitLab. GitHub shows `.github/README.md` on the
   repository page instead of upstream's `README.md`, which stays as it is.
 - Each feature branches from **upstream's** `main`, not from ours, so it can
@@ -55,6 +56,23 @@ note as message, and publish only the tag (to both remotes):
 tag=muxx-$(date -u +%Y%m%d%H%M) && git tag -a "$tag" && git push origin "$tag"
 ```
 `push.followTags` does not help here: `main` itself is never pushed by hand.
+Push the tag only once GitHub's `main` has the merge commit, which arrives
+through the mirror: `git ls-remote git@github.com:dwlfrth/muxx.git main` must
+show it. The image workflow refuses a tag whose commit is not on `main`.
+
+`.github/workflows/muxx-image.yml` builds the image on GitHub: on a release tag
+it checks that the tag is annotated, named `muxx-YYYYMMDDHHMM` and on a commit
+made on `main` itself (a merge commit, not one of a merged branch), and that
+the release was not pushed before (a moved tag must not replace an image),
+builds for linux/amd64 and linux/arm64, checks the version of the amd64 build
+(release named, no local changes), and pushes it to
+`ghcr.io/dwlfrth/muxx:<release>`, never `latest`. On `main`, when the image
+files change, it only builds. `Dockerfile.muxx` builds with the Go version CI
+tests with (`golang:1.27-alpine`): bump it together with CI's 1.27. The
+workflow's actions are pinned by commit, with the
+version as comment; bump them by hand. `Dockerfile.muxx.dockerignore` keeps
+`.git` in the build context for the version stamp: excluding a tracked file
+there makes every image report local changes.
 
 Everything muxx calls itself derives from one build variable,
 `moxvar.Distribution`, in `moxvar/distribution.go`: without it, a build is plain
@@ -88,6 +106,9 @@ the checklist when moving the project, e.g. to a self-hosted GitLab.
   --delete <branch>`.
 - GitHub: default branch `main`. Never merge on GitHub; its `main` comes only
   from the mirror.
+- GitHub package `ghcr.io/dwlfrth/muxx`: created by the first release, linked
+  to the repository by the image's source label. Its visibility is public;
+  check it after the first release, as a new package may start private.
 - GitHub ruleset `main: no deletion or force push` on `main`, with an empty
   bypass list: it blocks deleting `main` and rewriting its history, and lets
   normal pushes through, so the mirror is unaffected. A rule that blocks pushes
