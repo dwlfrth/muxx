@@ -1,6 +1,6 @@
 // Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten.
 
-export {dom, style, attr, prop, ElemArg}
+export {dom, style, attr, prop, ElemArg, productName, productTitle, productTitled, productVersion, productHeaders}
 
 type ElemArg = string | String | Element | Function | {_class: string[]} | {_attrs: {[k: string]: string}} | {_styles: {[k: string]: string | number}} | {_props: {[k: string]: any}} | {root: HTMLElement} | ElemArg[]
 
@@ -221,3 +221,36 @@ const attr = {
 }
 const style = (x: {[k: string]: string | number}) => { return {_styles: x}}
 const prop = (x: {[k: string]: any}) => { return {_props: x}}
+
+// For builds as a distribution of mox, the version starts with the product name,
+// e.g. "muxx 202611191730 (mox v0.0.18-...)". Versions of plain mox don't contain
+// " (mox ". The format comes from withDistribution in moxvar/distribution.go,
+// whose tests pin it.
+const productName = (version: string): string => {
+	if (!version || version.indexOf(' (mox ') < 0) {
+		return 'mox'
+	}
+	return version.substring(0, version.indexOf(' '))
+}
+
+// The product name with its first letter in upper case, e.g. "Mox".
+const productTitle = (version: string): string => {
+	const name = productName(version)
+	return name.charAt(0).toUpperCase() + name.substring(1)
+}
+
+// Returns title with a leading "Mox " replaced by the product title.
+const productTitled = (title: string, version: string): string =>
+	title.startsWith('Mox ') ? productTitle(version) + title.substring(3) : title
+
+// Returns text with header names starting with "X-Mox-" using the product title
+// instead, e.g. "X-Muxx-Webhook-ID", as the server sends them. Only for fixed text,
+// not for values entered by users.
+const productHeaders = (text: string, version: string): string =>
+	text.split('X-Mox-').join('X-' + productTitle(version) + '-')
+
+// The version without the leading product name, for use after "<product>/".
+const productVersion = (version: string): string => {
+	const name = productName(version)
+	return name === 'mox' ? version : version.substring(name.length + 1)
+}

@@ -1,5 +1,5 @@
 /* Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten. */
-import {dom, style, attr, prop, ElemArg} from '../lib'
+import {dom, style, attr, prop, ElemArg, productName, productTitled} from '../lib'
 import * as api from './api'
 
 // From HTML.
@@ -162,6 +162,7 @@ const crumblink = (text: string, path: string) => {
 	}
 }
 const crumbs = (...l: ({text: string, path: string} | string)[]) => {
+	l = l.map(e => typeof e === 'string' ? productTitled(e, moxversion) : {text: productTitled(e.text, moxversion), path: e.path})
 	const crumbtext = (e: {text: string, path: string} | string) => typeof e === 'string' ? e : e.text
 	document.title = l.map(e => crumbtext(e)).join(' - ')
 
@@ -197,8 +198,7 @@ const errmsg = (err: unknown) => ''+((err as any).message || '(no error message)
 const footer = () =>
 	dom.div(
 		style({marginTop: '6ex', opacity: 0.75}),
-		link('https://www.xmox.nl', 'mox'),
-		' ',
+		productName(moxversion) === 'mox' ? [link('https://www.xmox.nl', 'mox'), ' '] : [],
 		moxversion, ' ',
 		moxgoos, '/', moxgoarch,
 		', ', dom.a(attr.href('licenses.txt'), 'licenses')

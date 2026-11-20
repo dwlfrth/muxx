@@ -850,7 +850,7 @@ func composeAggregateReport(ctx context.Context, log mlog.Log, mf *os.File, from
 	messageID = fmt.Sprintf("<%s>", mox.MessageIDGen(xc.SMTPUTF8))
 	xc.Header("Message-Id", messageID)
 	xc.Header("Date", time.Now().Format(message.RFC5322Z))
-	xc.Header("User-Agent", "mox/"+moxvar.Version)
+	xc.Header("User-Agent", moxvar.UserAgent())
 	xc.Header("MIME-Version", "1.0")
 
 	// Multipart message, with a text/plain and the report attached.
@@ -990,7 +990,7 @@ func composeErrorReport(ctx context.Context, log mlog.Log, mf *os.File, fromAddr
 	messageID = fmt.Sprintf("<%s>", mox.MessageIDGen(xc.SMTPUTF8))
 	xc.Header("Message-Id", messageID)
 	xc.Header("Date", time.Now().Format(message.RFC5322Z))
-	xc.Header("User-Agent", "mox/"+moxvar.Version)
+	xc.Header("User-Agent", moxvar.UserAgent())
 	xc.Header("MIME-Version", "1.0")
 
 	textBody, ct, cte := xc.TextPart("plain", text)

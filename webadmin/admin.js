@@ -210,6 +210,17 @@
 	var prop = /* @__PURE__ */ __name((x) => {
 		return { _props: x };
 	}, "prop");
+	var productName = /* @__PURE__ */ __name((version) => {
+		if (!version || version.indexOf(" (mox ") < 0) {
+			return "mox";
+		}
+		return version.substring(0, version.indexOf(" "));
+	}, "productName");
+	var productTitle = /* @__PURE__ */ __name((version) => {
+		const name = productName(version);
+		return name.charAt(0).toUpperCase() + name.substring(1);
+	}, "productTitle");
+	var productTitled = /* @__PURE__ */ __name((title, version) => title.startsWith("Mox ") ? productTitle(version) + title.substring(3) : title, "productTitled");
 
 	// .js/webadmin/api.js
 	var DMARCPolicy;
@@ -1646,6 +1657,7 @@
 		};
 	}, "crumblink");
 	var crumbs = /* @__PURE__ */ __name((...l) => {
+		l = l.map((e) => typeof e === "string" ? productTitled(e, moxversion) : { text: productTitled(e.text, moxversion), path: e.path });
 		const crumbtext = /* @__PURE__ */ __name((e) => typeof e === "string" ? e : e.text, "crumbtext");
 		document.title = l.map((e) => crumbtext(e)).join(" - ");
 		const crumblink2 = /* @__PURE__ */ __name((e) => typeof e === "string" ? prewrap(e) : dom.a(e.text, attr.href(e.path)), "crumblink");
@@ -1669,7 +1681,7 @@
 		];
 	}, "crumbs");
 	var errmsg = /* @__PURE__ */ __name((err) => "" + (err.message || "(no error message)"), "errmsg");
-	var footer = /* @__PURE__ */ __name(() => dom.div(style({ marginTop: "6ex", opacity: 0.75 }), link("https://www.xmox.nl", "mox"), " ", moxversion, " ", moxgoos, "/", moxgoarch, ", ", dom.a(attr.href("licenses.txt"), "licenses")), "footer");
+	var footer = /* @__PURE__ */ __name(() => dom.div(style({ marginTop: "6ex", opacity: 0.75 }), productName(moxversion) === "mox" ? [link("https://www.xmox.nl", "mox"), " "] : [], moxversion, " ", moxgoos, "/", moxgoarch, ", ", dom.a(attr.href("licenses.txt"), "licenses")), "footer");
 	var age = /* @__PURE__ */ __name((date, future, nowSecs) => {
 		if (!nowSecs) {
 			nowSecs = (/* @__PURE__ */ new Date()).getTime() / 1e3;

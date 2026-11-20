@@ -21,6 +21,7 @@ import (
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
@@ -289,19 +290,19 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		// Messages with DMARC aggregate reports must have a DMARC pass. ../rfc/7489:1866
 		if d.dmarcResult.Status != dmarc.StatusPass {
 			log.Info("received dmarc aggregate report without dmarc pass, not processing as dmarc report")
-			headers += "X-Mox-DMARCReport-Error: no DMARC pass\r\n"
+			headers += moxvar.HeaderPrefix() + "DMARCReport-Error: no DMARC pass\r\n"
 		} else if report, err := dmarcrpt.ParseMessageReport(log.Logger, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
 			log.Infox("parsing dmarc aggregate report", err)
-			headers += "X-Mox-DMARCReport-Error: could not parse report\r\n"
+			headers += moxvar.HeaderPrefix() + "DMARCReport-Error: could not parse report\r\n"
 		} else if d, err := dns.ParseDomain(report.PolicyPublished.Domain); err != nil {
 			log.Infox("parsing domain in dmarc aggregate report", err)
-			headers += "X-Mox-DMARCReport-Error: could not parse domain in published policy\r\n"
+			headers += moxvar.HeaderPrefix() + "DMARCReport-Error: could not parse domain in published policy\r\n"
 		} else if _, ok := mox.Conf.Domain(d); !ok {
 			log.Info("dmarc aggregate report for domain not configured, ignoring", slog.Any("domain", d))
-			headers += "X-Mox-DMARCReport-Error: published policy domain unrecognized\r\n"
+			headers += moxvar.HeaderPrefix() + "DMARCReport-Error: published policy domain unrecognized\r\n"
 		} else if report.ReportMetadata.DateRange.End > time.Now().Unix()+60 {
 			log.Info("dmarc aggregate report with end date in the future, ignoring", slog.Any("domain", d), slog.Time("end", time.Unix(report.ReportMetadata.DateRange.End, 0)))
-			headers += "X-Mox-DMARCReport-Error: report has end date in the future\r\n"
+			headers += moxvar.HeaderPrefix() + "DMARCReport-Error: report has end date in the future\r\n"
 		} else {
 			dmarcReport = report
 		}
@@ -338,10 +339,10 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 
 		if !ok {
 			log.Info("received mail to tlsrpt without acceptable DKIM signature, not processing as tls report")
-			headers += "X-Mox-TLSReport-Error: no acceptable DKIM signature\r\n"
+			headers += moxvar.HeaderPrefix() + "TLSReport-Error: no acceptable DKIM signature\r\n"
 		} else if reportJSON, err := tlsrpt.ParseMessage(log.Logger, store.FileMsgReader(d.m.MsgPrefix, d.dataFile)); err != nil {
 			log.Infox("parsing tls report", err)
-			headers += "X-Mox-TLSReport-Error: could not parse TLS report\r\n"
+			headers += moxvar.HeaderPrefix() + "TLSReport-Error: could not parse TLS report\r\n"
 		} else {
 			var known bool
 			for _, p := range reportJSON.Policies {
@@ -355,7 +356,7 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 			}
 			if !known {
 				log.Info("tls report without one of configured domains, ignoring")
-				headers += "X-Mox-TLSReport-Error: report for unknown domain\r\n"
+				headers += moxvar.HeaderPrefix() + "TLSReport-Error: report for unknown domain\r\n"
 			} else {
 				report := reportJSON.Convert()
 				tlsReport = &report

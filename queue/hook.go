@@ -1251,10 +1251,10 @@ func HookPost(ctx context.Context, log mlog.Log, hookID int64, attempt int, url,
 	if err != nil {
 		return 0, "", fmt.Errorf("new request: %v", err)
 	}
-	req.Header.Set("User-Agent", fmt.Sprintf("mox/%s (webhook)", moxvar.Version))
+	req.Header.Set("User-Agent", moxvar.UserAgent()+" (webhook)")
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	req.Header.Set("X-Mox-Webhook-ID", fmt.Sprintf("%d", hookID))
-	req.Header.Set("X-Mox-Webhook-Attempt", fmt.Sprintf("%d", attempt))
+	req.Header.Set(moxvar.HeaderPrefix()+"Webhook-ID", fmt.Sprintf("%d", hookID))
+	req.Header.Set(moxvar.HeaderPrefix()+"Webhook-Attempt", fmt.Sprintf("%d", attempt))
 	if authz != "" {
 		req.Header.Set("Authorization", authz)
 	}

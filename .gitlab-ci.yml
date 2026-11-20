@@ -38,3 +38,26 @@ gates:
   - mkdir -p tmp && TMPDIR=$PWD/tmp make test
   - make fmt
   - git diff --exit-code
+
+# Beyond upstream's CI: the checks of upstream's "make check", with pinned
+# versions, and the vulnerability scan, all blocking. staticcheck skips SA1019:
+# its findings are deprecations in upstream's code (CLAUDE.md, "Do not fix").
+checks:
+  stage: test
+  image: golang:1.27-trixie
+  variables:
+    CGO_ENABLED: "0"
+  script:
+  - go vet ./...
+  - GOOS=linux GOARCH=386 go vet ./...
+  - go run github.com/gordonklaus/ineffassign@v0.1.0 ./...
+  - go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks inherit,-SA1019 ./...
+  - go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
+
+# The whole test suite under the race detector, with upstream's target. Go
+# stable only, to save compute minutes; oldstable is covered by "gates".
+race:
+  stage: test
+  image: golang:1.27-trixie
+  script:
+  - mkdir -p tmp && TMPDIR=$PWD/tmp make test-race

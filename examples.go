@@ -14,6 +14,7 @@ import (
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/webhook"
 )
@@ -41,7 +42,7 @@ func cmdExample(c *cmd) {
 	if match == nil {
 		log.Fatalln("not found")
 	}
-	fmt.Print(match())
+	fmt.Print(moxvar.Rename(match()))
 }
 
 func cmdConfigExample(c *cmd) {
@@ -67,7 +68,7 @@ func cmdConfigExample(c *cmd) {
 	if match == nil {
 		log.Fatalln("not found")
 	}
-	fmt.Print(match())
+	fmt.Print(moxvar.Rename(match()))
 }
 
 var configExamples = []struct {

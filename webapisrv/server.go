@@ -772,7 +772,7 @@ func (s server) Send(ctx context.Context, req webapi.SendRequest) (resp webapi.S
 		}
 	}
 	if !haveUserAgent {
-		xc.Header("User-Agent", "mox/"+moxvar.Version)
+		xc.Header("User-Agent", moxvar.UserAgent())
 	}
 
 	// Whether we have additional separately alternative/inline/attached file(s).

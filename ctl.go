@@ -30,6 +30,7 @@ import (
 	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/store"
@@ -1751,7 +1752,7 @@ func servectlcmd(ctx context.Context, xctl *ctl, cid int64, shutdown func()) {
 			}
 		}
 		if foundProblem {
-			fmt.Fprintf(xw, "\nProblems were found and fixed. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n")
+			fmt.Fprint(xw, moxvar.Rename("\nProblems were found and fixed. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n"))
 		}
 
 		xw.xclose()
@@ -1833,7 +1834,7 @@ func servectlcmd(ctx context.Context, xctl *ctl, cid int64, shutdown func()) {
 			err = acc.AssignThreads(ctx, log, nil, 0, 50000, xw)
 			xctl.xcheck(err, "reassign threads")
 
-			fmt.Fprintf(xw, "Threads reassigned. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n")
+			fmt.Fprint(xw, moxvar.Rename("Threads reassigned. You should invalidate messages stored at imap clients with the \"mox bumpuidvalidity account [mailbox]\" command.\n"))
 		}
 
 		if accountOpt != "" {

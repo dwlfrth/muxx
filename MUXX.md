@@ -1,0 +1,75 @@
+# muxx
+
+muxx is [mox](https://github.com/mjl-/mox), the modern full-featured mail
+server by Mechiel Lukkien, with additional features. Everything else is
+upstream mox, unchanged: its documentation, configuration and behaviour apply
+as they are. See [README.md](README.md).
+
+## The name
+
+muxx keeps its roots in mox: the same letters, one vowel apart, and the
+second x for mox extended. The rest is a wink to mutt, the mail client whose
+motto, "All mail clients suck. This one just sucks less.", every mail server
+could borrow.
+
+## Relation to mox
+
+Every muxx feature is off unless configured, so muxx without configuration
+behaves exactly like mox. Each feature is developed on its own branch from
+upstream's main, so it can be proposed to mox upstream on its own.
+
+A muxx release build presents itself as muxx: in its version, the SMTP
+greeting, the IMAP ID, the HTTP User-Agent, the command line, help texts and
+log messages, the titles of the web interfaces, its own message and webhook
+headers (`X-Muxx-*`), its metrics (`muxx_*`), the default configuration file
+(`muxx.conf`), the service files it generates (`muxx.service`,
+`muxx.freebsd.rc`), the environment variables `MUXXCONF` and `MUXX_DOCKER`,
+and the default system user and home directory (`muxx`, `/home/muxx`).
+
+Internally it is still mox: the Go module, `domains.conf`, internal
+environment variables, links to mox, and the documentation generated into the
+repository keep their names. A build without a release tag is mox in every
+respect.
+
+## Keeping up with mox
+
+muxx follows mox's main branch: upstream changes are merged into muxx as
+they appear, through the same review as any other change, and upstream
+release tags are carried over. The release note of each muxx tag names the
+mox version it is based on, so a release's distance from upstream can always
+be checked against mox's own releases and security announcements.
+
+## Versions
+
+Releases are annotated git tags `muxx-YYYYMMDDHHMM`, in UTC, e.g.
+`muxx-202611191730`. The tag message is the release note: the mox version the
+release is based on, and the muxx features it contains.
+
+A release build shows its release and the mox version it is based on, e.g.
+`muxx 202611191730 (mox v0.0.18-0.20261119…-ac22e02)`. The update check and
+the links to mox's documentation keep using the plain mox version.
+
+## Building
+
+As mox, see [README.md](README.md). A release build is made from a commit
+with a muxx tag, and carries that tag:
+
+    tag=$(git describe --tags --exact-match --match 'muxx-*') &&
+      go build -o muxx -ldflags "-X github.com/mjl-/mox/moxvar.Distribution=$tag"
+
+On a commit without a muxx tag, `git describe` fails and nothing is built. A
+binary built with a name other than a lower case name of letters and digits,
+optionally followed by a dash and a release, refuses to start.
+Without the `-ldflags` setting, the result is a plain mox build.
+
+## Source
+
+Developed in a private repository and published at
+<https://github.com/dwlfrth/muxx>. Changes to mox itself belong upstream at
+<https://github.com/mjl-/mox>.
+
+## License
+
+Like mox, available under the MIT license ([LICENSE.MIT](LICENSE.MIT)), with
+the Public Suffix List under the Mozilla Public License 2.0
+([LICENSE.MPLv2.0](LICENSE.MPLv2.0)).

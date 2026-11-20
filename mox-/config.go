@@ -45,6 +45,7 @@ import (
 	"github.com/mjl-/mox/message"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/mtasts"
 	"github.com/mjl-/mox/smtp"
 )
@@ -526,8 +527,8 @@ func ParseConfig(ctx context.Context, log mlog.Log, p string, checkOnly, doLoadT
 
 	f, err := os.Open(p)
 	if err != nil {
-		if os.IsNotExist(err) && os.Getenv("MOXCONF") == "" {
-			return nil, []error{fmt.Errorf("open config file: %v (hint: use mox -config ... or set MOXCONF=...)", err)}
+		if os.IsNotExist(err) && os.Getenv(moxvar.EnvName("CONF")) == "" {
+			return nil, []error{fmt.Errorf("open config file: %v (hint: use %s -config ... or set %s=...)", err, moxvar.ProductName(), moxvar.EnvName("CONF"))}
 		}
 		return nil, []error{fmt.Errorf("open config file: %v", err)}
 	}
@@ -584,13 +585,13 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 	}
 
 	if c.User == "" {
-		c.User = "mox"
+		c.User = moxvar.ProductName()
 	}
 	u, err := user.Lookup(c.User)
 	if err != nil {
 		uid, err := strconv.ParseUint(c.User, 10, 32)
 		if err != nil {
-			addErrorf("parsing unknown user %s as uid: %v (hint: add user mox with \"useradd -d $PWD mox\" or specify a different username on the quickstart command-line)", c.User, err)
+			addErrorf("parsing unknown user %s as uid: %v (hint: add user %s with \"useradd -d $PWD %s\" or specify a different username on the quickstart command-line)", c.User, err, moxvar.ProductName(), moxvar.ProductName())
 		} else {
 			// We assume the same gid as uid.
 			c.UID = uint32(uid)
