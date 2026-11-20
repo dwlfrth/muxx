@@ -1,0 +1,10 @@
+# muxx
+
+muxx is [mox](https://github.com/mjl-/mox), the modern full-featured mail
+server by Mechiel Lukkien, with additional features. Every muxx feature is off
+unless configured: without configuration, muxx behaves exactly like mox.
+
+- What muxx is, how it relates to mox, its versions and images:
+  [MUXX.md](../MUXX.md)
+- Everything else, from installation to configuration, is mox's:
+  [README.md](../README.md)
