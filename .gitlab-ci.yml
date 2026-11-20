@@ -1,0 +1,40 @@
+# You can override the included template(s) by including variable overrides
+# SAST customization: https://docs.gitlab.com/user/application_security/sast/#available-cicd-variables
+# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure/
+# Dependency Scanning customization: https://docs.gitlab.com/user/application_security/dependency_scanning/dependency_scanning_sbom/#customizing-analyzer-behavior
+# Container Scanning customization: https://docs.gitlab.com/user/application_security/container_scanning/#customizing-analyzer-behavior
+# Note that environment variables can be set in several places
+# See https://docs.gitlab.com/ci/variables/#cicd-variable-precedence
+stages:
+- test
+- secret-detection
+sast:
+  stage: test
+include:
+- template: Security/SAST.gitlab-ci.yml
+- template: Security/Secret-Detection.gitlab-ci.yml
+secret_detection:
+  stage: secret-detection
+
+# Same steps as upstream's .github/workflows/build-test.yml, on Go stable and
+# oldstable with Node 24. The Makefile runs npm ci itself when needed.
+gates:
+  stage: test
+  image: golang:${GO_VERSION}-trixie
+  parallel:
+    matrix:
+    - GO_VERSION: ["1.27", "1.26"]
+  variables:
+    NODE_VERSION: v24.22.3
+    NODE_SHA256: 4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb
+  before_script:
+  - apt-get update -qq && apt-get install -y -qq xz-utils >/dev/null
+  - curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-linux-x64.tar.xz"
+  - echo "$NODE_SHA256  /tmp/node.tar.xz" | sha256sum -c -
+  - tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
+  script:
+  - touch */*.ts
+  - make build
+  - mkdir -p tmp && TMPDIR=$PWD/tmp make test
+  - make fmt
+  - git diff --exit-code
