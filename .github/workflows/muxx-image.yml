@@ -1,0 +1,98 @@
+# The muxx image, see MUXX.md. On an annotated release tag muxx-YYYYMMDDHHMM on
+# a commit of main: built from Dockerfile.muxx for linux/amd64 and linux/arm64,
+# and pushed as ghcr.io/dwlfrth/muxx:YYYYMMDDHHMM, never as "latest". On main,
+# when the image files change: built only, with a placeholder release, so the
+# build is tested before a release depends on it.
+name: muxx image
+
+on:
+  push:
+    tags: ['muxx-*']
+    branches: [main]
+    paths: ['Dockerfile.muxx', 'Dockerfile.muxx.dockerignore', '.github/workflows/muxx-image.yml']
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        # History and tags, for the version stamp and the check on main.
+        fetch-depth: 0
+
+    - name: Release
+      id: release
+      run: |
+        if [ "$GITHUB_REF_TYPE" != tag ]; then
+          {
+            echo "distribution=muxx-000000000000"
+            echo "push=false"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        tag="$GITHUB_REF_NAME"
+        echo "$tag" | grep -qE '^muxx-[0-9]{12}$' || { echo "tag $tag is not muxx-YYYYMMDDHHMM" >&2; exit 1; }
+        # The checkout can leave the pushed tag as a lightweight ref, fetch it as is.
+        git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+        [ "$(git cat-file -t "refs/tags/$tag")" = tag ] || { echo "tag $tag is not annotated" >&2; exit 1; }
+        # Only commits made on main itself, i.e. merge commits, not the commits of a
+        # merged branch: CI never tested those as they are on main.
+        git rev-list --first-parent origin/main | grep -qx "$GITHUB_SHA" || { echo "tag $tag is not on main" >&2; exit 1; }
+        {
+          echo "distribution=$tag"
+          echo "release=${tag#muxx-}"
+          echo "push=true"
+        } >> "$GITHUB_OUTPUT"
+
+    - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+    - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+    - name: Build for linux/amd64 and check the version
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: Dockerfile.muxx
+        platforms: linux/amd64
+        build-args: DISTRIBUTION=${{ steps.release.outputs.distribution }}
+        load: true
+        tags: muxx:check
+    - env:
+        DISTRIBUTION: ${{ steps.release.outputs.distribution }}
+      run: |
+        version=$(docker run --rm muxx:check /bin/muxx version | head -1)
+        echo "$version"
+        echo "$version" | grep -q "^muxx ${DISTRIBUTION#muxx-} (mox " || { echo "version does not name the release" >&2; exit 1; }
+        if echo "$version" | grep -q '+dirty'; then echo "version stamp reports local changes" >&2; exit 1; fi
+
+    - if: steps.release.outputs.push == 'true'
+      uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # A release is pushed once. A tag that was moved and pushed again would otherwise
+    # replace the image of that release. Only a successful lookup stops: a new
+    # package cannot be looked up before its first push.
+    - if: steps.release.outputs.push == 'true'
+      env:
+        IMAGE: ghcr.io/dwlfrth/muxx:${{ steps.release.outputs.release }}
+      run: |
+        if docker buildx imagetools inspect "$IMAGE"; then
+          echo "$IMAGE exists already, a release is not pushed again" >&2
+          exit 1
+        fi
+
+    - name: Build for all platforms, and push for a release
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: Dockerfile.muxx
+        platforms: linux/amd64,linux/arm64
+        build-args: DISTRIBUTION=${{ steps.release.outputs.distribution }}
+        labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+        push: ${{ steps.release.outputs.push == 'true' }}
+        tags: ghcr.io/dwlfrth/muxx:${{ steps.release.outputs.release || 'check' }}

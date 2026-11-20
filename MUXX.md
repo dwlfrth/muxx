@@ -60,6 +60,20 @@ with a muxx tag, and carries that tag:
 On a commit without a muxx tag, `git describe` fails and nothing is built. A
 binary built with a name other than a lower case name of letters and digits,
 optionally followed by a dash and a release, refuses to start.
+
+## Image
+
+Each release is published as a container image for linux/amd64 and
+linux/arm64, named after the release, e.g.
+`ghcr.io/dwlfrth/muxx:202611191730`. There is no `latest`: choose a release.
+The image runs `muxx serve` in `/muxx`, so it expects its configuration in
+`/muxx/config` and, with the default configuration, its data in `/muxx/data`.
+
+It is built from `Dockerfile.muxx`, a copy of mox's `Dockerfile`, when a
+release tag is pushed. To build it yourself, from a commit with a muxx tag:
+
+    tag=$(git describe --tags --exact-match --match 'muxx-*') &&
+      docker build -f Dockerfile.muxx --build-arg DISTRIBUTION=$tag -t muxx:${tag#muxx-} .
 Without the `-ldflags` setting, the result is a plain mox build.
 
 ## Source

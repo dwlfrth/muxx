@@ -1,0 +1,12 @@
+# Used instead of .dockerignore for Dockerfile.muxx. Unlike upstream's, it keeps
+# .git and all tracked files in the build context, so the binary's version stamp
+# names the commit and the mox version, and does not report local changes that
+# are only files left out. Excluded are only files git does not track.
+/mox
+/muxx
+/node_modules/
+/local/
+/cover.*
+/.go/
+!/.go/empty
+/tmp/
