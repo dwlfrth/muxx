@@ -105,6 +105,9 @@ the checklist when moving the project, e.g. to a self-hosted GitLab.
 
 - GitLab, protected branch `main`: merge by Maintainers, push by no one, no
   force push.
+- GitLab CI/CD configuration file `.gitlab-ci.yml@<group>/muxx:main`: every
+  branch runs `main`'s pipeline, so feature branches from upstream, which have
+  no CI file, get pipelines too.
 - GitLab push mirror to GitHub: only protected branches, keep divergent refs.
   Authenticated with a GitHub fine-grained token `gitlab-muxx-push-mirror`
   (this repo only, Contents and Workflows read/write); the mirror stops when
@@ -139,6 +142,12 @@ not fix"), `govulncheck` v1.10.0, and `actionlint` v1.7.12 with Debian's
 `shellcheck` on `.github/workflows/muxx-image.yml` (not on upstream's
 workflow). Those versions are pinned there and bumped by hand; run them
 locally at the same versions with `go run ...@<pin>`.
+Pipelines take their definition from `main` (see "Settings outside git"). A
+branch that changes `.gitlab-ci.yml` is tested with its own version instead:
+the `ci-changes` job runs it as a child pipeline and the other jobs skip
+themselves, so they run once. That job is itself only active once merged, so
+the first change after it shows whether it works.
+
 GitLab's `race` job runs `make test-race`, the whole suite under the race
 detector, on Go 1.27; locally, `go test -race` on the touched packages is
 enough before pushing. Do not run other gates while a test run with
