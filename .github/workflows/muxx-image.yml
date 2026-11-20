@@ -1,7 +1,7 @@
 # The muxx image, see MUXX.md. On an annotated release tag muxx-YYYYMMDDHHMM on
 # a commit of main: built from Dockerfile.muxx for linux/amd64, and pushed as
 # ghcr.io/dwlfrth/muxx:YYYYMMDDHHMM, never as "latest". On main, when the image
-# files change: built only, with a placeholder release, so the build is tested
+# files change: built only, as release "dev", so the build is tested
 # before a release depends on it.
 name: muxx image
 
@@ -28,7 +28,7 @@ jobs:
       run: |
         if [ "$GITHUB_REF_TYPE" != tag ]; then
           {
-            echo "distribution=muxx-000000000000"
+            echo "distribution=muxx-dev"
             echo "push=false"
           } >> "$GITHUB_OUTPUT"
           exit 0

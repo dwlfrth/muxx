@@ -61,6 +61,11 @@ On a commit without a muxx tag, `git describe` fails and nothing is built. A
 binary built with a name other than a lower case name of letters and digits,
 optionally followed by a dash and a release, refuses to start.
 
+A development build, from any commit, is marked as such instead of as a
+release, e.g. `muxx dev (mox v0.0.18-…-531ebb8…)`:
+
+    go build -o muxx -ldflags "-X github.com/mjl-/mox/moxvar.Distribution=muxx-dev"
+
 ## Image
 
 Each release is published as a container image for linux/amd64, named after the

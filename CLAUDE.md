@@ -76,6 +76,11 @@ actions are pinned by commit, with the version as comment; bump them by hand.
 version stamp: excluding a tracked file there makes every image report local
 changes.
 
+A build of muxx from a commit without a release tag sets the variable to
+`muxx-dev`, so it reads `muxx dev (mox <version>)` and cannot be mistaken for
+a release; the command is in `MUXX.md`. Builds without the variable stay plain
+mox, which upstream's tests and the generated documentation rely on.
+
 Everything muxx calls itself derives from one build variable,
 `moxvar.Distribution`, in `moxvar/distribution.go`: without it, a build is plain
 mox. `moxvar.Rename` renames text as written in the code, never text that
@@ -103,14 +108,16 @@ the checklist when moving the project, e.g. to a self-hosted GitLab.
 - GitLab push mirror to GitHub: only protected branches, keep divergent refs.
   Authenticated with a GitHub fine-grained token `gitlab-muxx-push-mirror`
   (this repo only, Contents and Workflows read/write); the mirror stops when
-  it expires. The mirror never deletes branches on GitHub: delete a merged
-  feature branch there by hand, `git push git@github.com:dwlfrth/muxx.git
-  --delete <branch>`.
+  it expires. Tags are mirrored too, so a release tag pushed to GitLab can
+  reach GitHub before the second push URL does. The mirror never deletes
+  branches on GitHub: delete a merged feature branch there by hand,
+  `git push git@github.com:dwlfrth/muxx.git --delete <branch>`.
 - GitHub: default branch `main`. Never merge on GitHub; its `main` comes only
   from the mirror.
 - GitHub package `ghcr.io/dwlfrth/muxx`: created by the first release, linked
-  to the repository by the image's source label. Its visibility is public;
-  check it after the first release, as a new package may start private.
+  to the repository by the image's source label. Its visibility is separate
+  from the repository's: the package started private and was made public by
+  hand, which a new package would need again.
 - GitHub ruleset `main: no deletion or force push` on `main`, with an empty
   bypass list: it blocks deleting `main` and rewriting its history, and lets
   normal pushes through, so the mirror is unaffected. A rule that blocks pushes
