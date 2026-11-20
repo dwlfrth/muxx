@@ -40,8 +40,10 @@ gates:
   - git diff --exit-code
 
 # Beyond upstream's CI: the checks of upstream's "make check", with pinned
-# versions, and the vulnerability scan, all blocking. staticcheck skips SA1019:
-# its findings are deprecations in upstream's code (CLAUDE.md, "Do not fix").
+# versions, the vulnerability scan, and actionlint on muxx's own workflow, all
+# blocking. staticcheck skips SA1019: its findings are deprecations in upstream's
+# code (CLAUDE.md, "Do not fix"). actionlint checks the workflow's shell scripts
+# only when shellcheck is installed, hence the install.
 checks:
   stage: test
   image: golang:1.27-trixie
@@ -53,6 +55,8 @@ checks:
   - go run github.com/gordonklaus/ineffassign@v0.1.0 ./...
   - go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks inherit,-SA1019 ./...
   - go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
+  - apt-get update -qq && apt-get install -y -qq shellcheck >/dev/null
+  - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/muxx-image.yml
 
 # The whole test suite under the race detector, with upstream's target. Go
 # stable only, to save compute minutes; oldstable is covered by "gates".

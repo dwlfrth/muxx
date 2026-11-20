@@ -126,8 +126,10 @@ GitHub Actions runs upstream's workflow on every push to GitHub.
 
 GitLab's `checks` job adds, blocking, on Go 1.27: `go vet` (also for
 linux/386), `ineffassign` v0.1.0, `staticcheck` v0.8.2 without SA1019 (see "Do
-not fix") and `govulncheck` v1.10.0. Those versions are pinned there and
-bumped by hand; run them locally at the same versions with `go run ...@<pin>`.
+not fix"), `govulncheck` v1.10.0, and `actionlint` v1.7.12 with Debian's
+`shellcheck` on `.github/workflows/muxx-image.yml` (not on upstream's
+workflow). Those versions are pinned there and bumped by hand; run them
+locally at the same versions with `go run ...@<pin>`.
 GitLab's `race` job runs `make test-race`, the whole suite under the race
 detector, on Go 1.27; locally, `go test -race` on the touched packages is
 enough before pushing. Do not run other gates while a test run with
