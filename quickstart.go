@@ -35,6 +35,7 @@ import (
 	"github.com/mjl-/mox/dnsbl"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/rdap"
 	"github.com/mjl-/mox/smtp"
@@ -199,7 +200,7 @@ logging in with IMAP.
 		fmt.Println("")
 		fatalf("checking dnssec support in resolver: %v", err)
 	} else if !resolverDNSSECResult.Authentic {
-		fmt.Printf(`
+		fmt.Print(moxvar.Rename(`
 
 WARNING: It looks like the DNS resolvers configured on your system do not
 verify DNSSEC, or aren't trusted (by having loopback IPs or through "options
@@ -236,7 +237,7 @@ Troubleshooting hints:
   use it to check whether unbound is verifying DNSSEC correctly.
 - Increase logging in unbound, see options "verbosity" and "log-queries".
 
-`)
+`))
 	} else {
 		fmt.Println(" OK")
 	}
@@ -479,7 +480,7 @@ again with the -hostname flag.
 			fmt.Printf("\n")
 		}
 		dnswarned = true
-		fmt.Printf(`
+		fmt.Printf(moxvar.Rename(`
 WARNING: Quickstart assumed the hostname of this machine is %s and generates a
 config for that host, but could not retrieve that name from DNS:
 
@@ -495,7 +496,7 @@ This likely means one of two things:
    your public IPs resolve back (reverse) to your hostname.
 
 
-`, dnshostname, err)
+`), dnshostname, err)
 	} else if !domainDNSSECResult.Authentic {
 		if !dnswarned {
 			fmt.Printf("\n")
@@ -602,7 +603,7 @@ messages over SMTP.
 			}
 		}
 		if !ok {
-			fmt.Printf(`
+			fmt.Print(moxvar.Rename(`
 WARNING: Could not verify outgoing smtp connections can be made, outgoing
 delivery may not be working. Many providers block outgoing smtp connections by
 default, requiring an explicit request or a cooldown period before allowing
@@ -610,7 +611,7 @@ outgoing smtp connections. To send through a smarthost, configure a "Transport"
 in mox.conf and use it in "Routes" in domains.conf. See
 "mox config example transport".
 
-`)
+`))
 		}
 
 		// Check if domain is recently registered.
@@ -690,7 +691,7 @@ listed in more DNS block lists, visit:
 	}
 
 	if defaultPublicListenerIPs {
-		log.Printf(`
+		log.Print(moxvar.Rename(`
 WARNING: Could not find your public IP address(es). The "public" listener is
 configured to listen on 0.0.0.0 (IPv4) and :: (IPv6). If you don't change these
 to your actual public IP addresses, you will likely get "address in use" errors
@@ -698,10 +699,10 @@ when starting mox because the "internal" listener binds to a specific IP
 address on the same port(s). If you are behind a NAT, instead configure the
 actual public IPs in the listener's "NATIPs" option.
 
-`)
+`))
 	}
 	if len(publicNATIPs) > 0 {
-		log.Printf(`
+		log.Print(moxvar.Rename(`
 NOTE: Quickstart used the IPs of the host name of the mail server, but only
 found private IPs on the machine. This indicates this machine is behind a NAT,
 so the host IPs were configured in the NATIPs field of the public listeners. If
@@ -712,12 +713,12 @@ email for a domain, and mox uses IP-based (non)junk classification, and IP-based
 rate-limiting both for accepting email and blocking bad actors (such as with too
 many authentication failures).
 
-`)
+`))
 	}
 
 	fmt.Printf("\n")
 
-	user := "mox"
+	user := moxvar.ProductName()
 	if len(args) == 2 {
 		user = args[1]
 	}
@@ -891,7 +892,7 @@ and check the admin page for the needed DNS records.`)
 	sc.HostTLSRPT.Localpart = "tlsreports"
 	sc.HostTLSRPT.Mailbox = "TLSRPT"
 
-	mox.ConfigStaticPath = filepath.FromSlash("config/mox.conf")
+	mox.ConfigStaticPath = filepath.FromSlash("config/" + moxvar.ConfigFileName())
 	mox.ConfigDynamicPath = filepath.FromSlash("config/domains.conf")
 
 	mox.Conf.DynamicLastCheck = time.Now() // Prevent error logging by Make calls below.
@@ -923,7 +924,7 @@ and check the admin page for the needed DNS records.`)
 	for _, bl := range public.SMTP.DNSBLs {
 		confstr = strings.ReplaceAll(confstr, "- "+bl+"\n", "#- "+bl+"\n")
 	}
-	xwritefile(filepath.FromSlash("config/mox.conf"), []byte(confstr), 0660)
+	xwritefile(filepath.FromSlash("config/"+moxvar.ConfigFileName()), []byte(moxvar.RenameComments(confstr)), 0660)
 
 	// Generate domains config, and add a commented out example for delivery to a mailing list.
 	var db bytes.Buffer
@@ -963,11 +964,11 @@ and check the admin page for the needed DNS records.`)
 		ndests.WriteString("#\t\t" + line + "\n")
 	}
 	dconfstr := strings.ReplaceAll(db.String(), odests, ndests.String())
-	xwritefile(filepath.FromSlash("config/domains.conf"), []byte(dconfstr), 0660)
+	xwritefile(filepath.FromSlash("config/domains.conf"), []byte(moxvar.RenameComments(dconfstr)), 0660)
 
 	// Verify config.
 	loadTLSKeyCerts := !existingWebserver
-	mc, errs := mox.ParseConfig(context.Background(), c.log, filepath.FromSlash("config/mox.conf"), true, loadTLSKeyCerts, false)
+	mc, errs := mox.ParseConfig(context.Background(), c.log, filepath.FromSlash("config/"+moxvar.ConfigFileName()), true, loadTLSKeyCerts, false)
 	if len(errs) > 0 {
 		if len(errs) > 1 {
 			log.Printf("checking generated config, multiple errors:")
@@ -1016,7 +1017,7 @@ autoconfig/autodiscover does not work, use these settings:
 	printClientConfig(domain)
 
 	if existingWebserver {
-		fmt.Printf(`
+		fmt.Printf(moxvar.Rename(`
 Configuration files have been written to config/mox.conf and
 config/domains.conf.
 
@@ -1043,16 +1044,16 @@ config is valid, run:
 	./mox config test
 
 The DNS records to add:
-`, domain.ASCII, domain.ASCII, dnshostname.ASCII)
+`), domain.ASCII, domain.ASCII, dnshostname.ASCII)
 	} else {
-		fmt.Printf(`
+		fmt.Print(moxvar.Rename(`
 Configuration files have been written to config/mox.conf and
 config/domains.conf. You should review them. Then create the DNS records below,
 by adding them to your zone file or through the web interface of your DNS
 operator. You can also skip creating the DNS records and start mox immediately.
 The admin interface can show these same records, and has a page to check they
 have been configured correctly. The DNS records to add:
-`)
+`))
 	}
 
 	// We do not verify the records exist: If they don't exist, we would only be
@@ -1071,42 +1072,45 @@ or if you are sending email for your domain from other machines/services, you
 should understand the consequences of the DNS records above before
 continuing!
 `)
-	if os.Getenv("MOX_DOCKER") == "" {
-		fmt.Printf(`
+	if os.Getenv(moxvar.EnvName("_DOCKER")) == "" {
+		fmt.Print(moxvar.Rename(`
 You can now start mox with "./mox serve", as root.
-`)
+`))
 	} else {
-		fmt.Printf(`
+		fmt.Print(moxvar.Rename(`
 You can now start the mox container.
-`)
+`))
 	}
-	fmt.Printf(`
+	fmt.Print(moxvar.Rename(`
 File ownership and permissions are automatically set correctly by mox when
 starting up. You may want to enable mox as a service.
 
-`)
+`))
 
 	// For now, we only give service config instructions for linux when not running in docker.
-	if runtime.GOOS == "linux" && os.Getenv("MOX_DOCKER") == "" {
+	if runtime.GOOS == "linux" && os.Getenv(moxvar.EnvName("_DOCKER")) == "" {
 		pwd, err := os.Getwd()
 		if err != nil {
 			log.Printf("current working directory: %v", err)
-			pwd = "/home/mox"
+			pwd = "/home/" + moxvar.ProductName()
 		}
-		service := strings.ReplaceAll(moxService, "/home/mox", pwd)
-		xwritefile("mox.service", []byte(service), 0644)
-		cleanupPaths = append(cleanupPaths, "mox.service")
-		fmt.Printf(`See mox.service for a systemd service file. To enable and start:
+		// For builds as a distribution, the service is named after it.
+		service := strings.ReplaceAll(moxService, "mox", moxvar.ProductName())
+		service = strings.ReplaceAll(service, "/home/"+moxvar.ProductName(), pwd)
+		xwritefile(moxvar.ProductName()+".service", []byte(service), 0644)
+		cleanupPaths = append(cleanupPaths, moxvar.ProductName()+".service")
+		fmt.Print(moxvar.Rename(`See mox.service for a systemd service file. To enable and start:
 
 	sudo chmod 644 mox.service
 	sudo systemctl enable $PWD/mox.service
 	sudo systemctl start mox.service
 	sudo journalctl -f -u mox.service # See logs
-`)
+`))
 	} else if runtime.GOOS == "freebsd" {
-		xwritefile("mox.freebsd.rc", []byte(moxFreebsdRc), 0555)
-		cleanupPaths = append(cleanupPaths, "mox.freebsd.rc")
-		fmt.Printf(`See mox.freebsd.rc for a FreeBSD rc file. To enable and start, run as root:
+		rc := strings.ReplaceAll(moxFreebsdRc, "mox", moxvar.ProductName())
+		xwritefile(moxvar.ProductName()+".freebsd.rc", []byte(rc), 0555)
+		cleanupPaths = append(cleanupPaths, moxvar.ProductName()+".freebsd.rc")
+		fmt.Print(moxvar.Rename(`See mox.freebsd.rc for a FreeBSD rc file. To enable and start, run as root:
 
 	mkdir -p /usr/local/etc/rc.d/
 	cp -a mox.freebsd.rc /usr/local/etc/rc.d/mox
@@ -1115,10 +1119,10 @@ starting up. You may want to enable mox as a service.
 	service mox start
 	service mox status
 	tail -f /var/log/mox.log # See logs
-`)
+`))
 	}
 
-	fmt.Printf(`
+	fmt.Print(moxvar.Rename(`
 After starting mox, the web interfaces are served at:
 
 http://localhost/         - account (email address as username)
@@ -1133,13 +1137,13 @@ If you run into problem, have questions/feedback or found a bug, please let us
 know. Mox needs your help!
 
 Enjoy!
-`)
+`))
 
 	if !existingWebserver {
-		fmt.Printf(`
+		fmt.Print(moxvar.Rename(`
 PS: If you want to run mox along side an existing webserver that uses port 443
 and 80, see "mox help quickstart" with the -existing-webserver option.
-`)
+`))
 	}
 
 	cleanupPaths = nil

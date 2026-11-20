@@ -2497,9 +2497,9 @@ func (c *conn) cmdID(tag, cmd string, p *parser) {
 	// Response syntax: ../rfc/2971:243
 	// We send our name, and only the version for authenticated users. ../rfc/2971:193
 	if c.state == stateAuthenticated || c.state == stateSelected {
-		c.xbwritelinef(`* ID ("name" "mox" "version" %s)`, string0(moxvar.Version).pack(c))
+		c.xbwritelinef(`* ID ("name" "%s" "version" %s)`, moxvar.ProductName(), string0(moxvar.Version).pack(c))
 	} else {
-		c.xbwritelinef(`* ID ("name" "mox")`)
+		c.xbwritelinef(`* ID ("name" "%s")`, moxvar.ProductName())
 	}
 	c.ok(tag, cmd)
 }

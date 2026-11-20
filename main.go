@@ -275,6 +275,11 @@ type cmd struct {
 }
 
 func (c *cmd) Parse() []string {
+	// For builds as a distribution, help texts use its name. Commands set their help
+	// and params before calling Parse.
+	c.params = moxvar.Rename(c.params)
+	c.help = moxvar.Rename(c.help)
+
 	// To gather params and usage information, we just run the command but cause this
 	// panic after the command has registered its flags and set its params and help
 	// information. This is then caught and that info printed.
@@ -289,7 +294,7 @@ func (c *cmd) Parse() []string {
 }
 
 func (c *cmd) gather() {
-	c.flag = flag.NewFlagSet("mox "+strings.Join(c.words, " "), flag.ExitOnError)
+	c.flag = flag.NewFlagSet(moxvar.ProductName()+" "+strings.Join(c.words, " "), flag.ExitOnError)
 	c._gather = true
 	defer func() {
 		x := recover()
@@ -303,7 +308,7 @@ func (c *cmd) gather() {
 
 func (c *cmd) makeUsage() string {
 	var r strings.Builder
-	cs := "mox " + strings.Join(c.words, " ")
+	cs := moxvar.ProductName() + " " + strings.Join(c.words, " ")
 	for i, line := range strings.Split(strings.TrimSpace(c.params), "\n") {
 		s := ""
 		if i == 0 {
@@ -315,6 +320,9 @@ func (c *cmd) makeUsage() string {
 		fmt.Fprintf(&r, "%6s %s%s\n", s, cs, line)
 	}
 	c.flag.SetOutput(&r)
+	// Flag descriptions are part of the help text too, their default values are not:
+	// those can come from the environment.
+	c.flag.VisitAll(func(f *flag.Flag) { f.Usage = moxvar.Rename(f.Usage) })
 	c.flag.PrintDefaults()
 	return r.String()
 }
@@ -369,7 +377,7 @@ If a single command matches, its usage and full help text is printed.
 	}
 	for _, c := range partial {
 		c.gather()
-		line := "mox " + strings.Join(c.words, " ")
+		line := moxvar.ProductName() + " " + strings.Join(c.words, " ")
 		fmt.Printf("%s\n", line)
 		if c.help != "" {
 			fmt.Printf("\t%s\n", strings.Split(c.help, "\n")[0])
@@ -399,7 +407,7 @@ Used to generate documentation.
 		}
 		n++
 
-		fmt.Fprintf(os.Stderr, "# mox %s\n\n", strings.Join(c.words, " "))
+		fmt.Fprintf(os.Stderr, "# %s %s\n\n", moxvar.ProductName(), strings.Join(c.words, " "))
 		if c.help != "" {
 			fmt.Fprintln(os.Stderr, c.help+"\n")
 		}
@@ -412,7 +420,7 @@ Used to generate documentation.
 func usage(l []cmd, unlisted bool) {
 	var lines []string
 	if !unlisted {
-		lines = append(lines, "mox [-config config/mox.conf] [-pedantic] ...")
+		lines = append(lines, moxvar.Rename("mox [-config config/mox.conf] [-pedantic] ..."))
 	}
 	for _, c := range l {
 		c.gather()
@@ -420,7 +428,7 @@ func usage(l []cmd, unlisted bool) {
 			continue
 		}
 		for line := range strings.SplitSeq(c.params, "\n") {
-			x := append([]string{"mox"}, c.words...)
+			x := append([]string{moxvar.ProductName()}, c.words...)
 			if line != "" {
 				x = append(x, line)
 			}
@@ -492,7 +500,7 @@ func main() {
 		log.Fatalf("can only execute as sendmail when effective gid is different from gid")
 	}
 
-	flag.StringVar(&mox.ConfigStaticPath, "config", envString("MOXCONF", filepath.FromSlash("config/mox.conf")), "configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf")
+	flag.StringVar(&mox.ConfigStaticPath, "config", envString(moxvar.EnvName("CONF"), filepath.FromSlash("config/"+moxvar.ConfigFileName())), moxvar.Rename("configuration file, other config files are looked up in the same directory, defaults to $MOXCONF with a fallback to mox.conf"))
 	flag.StringVar(&loglevel, "loglevel", "", "if non-empty, this log level is set early in startup")
 	flag.BoolVar(&pedantic, "pedantic", false, "protocol violations result in errors instead of accepting/working around them")
 	flag.BoolVar(&store.CheckConsistencyOnClose, "checkconsistency", false, "dangerous option for testing only, enables data checks that abort/panic when inconsistencies are found")
@@ -542,7 +550,7 @@ next:
 				continue next
 			}
 		}
-		c.flag = flag.NewFlagSet("mox "+strings.Join(c.words, " "), flag.ExitOnError)
+		c.flag = flag.NewFlagSet(moxvar.ProductName()+" "+strings.Join(c.words, " "), flag.ExitOnError)
 		c.flagArgs = args[len(c.words):]
 		c.log = mlog.New(strings.Join(c.words, ""), nil)
 		c.fn(&c)
@@ -654,9 +662,12 @@ may contain unfinished list items.
 		c.Usage()
 	}
 
+	// The documentation uses the name of a distribution, so describe to a buffer first.
 	var sc config.Static
-	err := sconf.Describe(os.Stdout, &sc)
+	var b strings.Builder
+	err := sconf.Describe(&b, &sc)
 	xcheckf(err, "describing config")
+	fmt.Print(moxvar.Rename(b.String()))
 }
 
 func cmdConfigDescribeDomains(c *cmd) {
@@ -675,9 +686,12 @@ needs modifications to make it valid.
 		c.Usage()
 	}
 
+	// The documentation uses the name of a distribution, so describe to a buffer first.
 	var dc config.Dynamic
-	err := sconf.Describe(os.Stdout, &dc)
+	var b strings.Builder
+	err := sconf.Describe(&b, &dc)
 	xcheckf(err, "describing config")
+	fmt.Print(moxvar.Rename(b.String()))
 }
 
 func cmdConfigPrintservice(c *cmd) {
@@ -695,9 +709,11 @@ date version.
 	pwd, err := os.Getwd()
 	if err != nil {
 		log.Printf("current working directory: %v", err)
-		pwd = "/home/mox"
+		pwd = "/home/" + moxvar.ProductName()
 	}
-	service := strings.ReplaceAll(moxService, "/home/mox", pwd)
+	// Same as quickstart: for builds as a distribution, the service is named after it.
+	service := strings.ReplaceAll(moxService, "mox", moxvar.ProductName())
+	service = strings.ReplaceAll(service, "/home/"+moxvar.ProductName(), pwd)
 	fmt.Print(service)
 }
 
@@ -981,7 +997,7 @@ func ctlcmdConfigAccountAdd(ctl *ctl, account, address string) {
 	ctl.xwrite(account)
 	ctl.xwrite(address)
 	ctl.xreadok()
-	fmt.Printf("account added, set a password with \"mox setaccountpassword %s\"\n", account)
+	fmt.Printf("account added, set a password with \"%s setaccountpassword %s\"\n", moxvar.ProductName(), account)
 }
 
 func cmdConfigAccountRemove(c *cmd) {
@@ -1680,10 +1696,10 @@ for a domain and create the TLSA DNS records it suggests to enable DANE.
 		}
 	}
 	if didCreate {
-		fmt.Printf(`
+		fmt.Print(moxvar.Rename(`
 After updating mox.conf and restarting, run "mox config dnsrecords" for a
 domain and create the TLSA DNS records it suggests to enable DANE.
-`)
+`))
 	}
 }
 
@@ -1754,7 +1770,7 @@ new mail deliveries.
 	} else if err != io.EOF {
 		log.Fatalf("expected eof after graceful shutdown, got error %v", err)
 	}
-	fmt.Println("mox stopped")
+	fmt.Println(moxvar.ProductName() + " stopped")
 }
 
 func cmdBackup(c *cmd) {

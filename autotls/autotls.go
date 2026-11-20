@@ -164,7 +164,7 @@ func Load(log mlog.Log, name, acmeDir, contactEmail, directoryURL string, eabKey
 		Client: &acme.Client{
 			DirectoryURL: directoryURL,
 			Key:          key,
-			UserAgent:    "mox/" + moxvar.Version,
+			UserAgent:    moxvar.UserAgent(),
 		},
 		GetPrivateKey: getPrivateKey,
 		// HostPolicy set below.

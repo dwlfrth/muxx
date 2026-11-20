@@ -460,7 +460,7 @@ possibly making them potentially no longer readable by the previous version.
 	checkOther()
 
 	if backupmoxversion != moxvar.Version {
-		log.Printf("NOTE: The backup was made with mox version %q, while verifydata was run with mox version %q. Database files have probably been modified by running mox verifydata. Make a fresh backup before upgrading.", backupmoxversion, moxvar.Version)
+		log.Printf(moxvar.Rename("NOTE: The backup was made with mox version %q, while verifydata was run with mox version %q. Database files have probably been modified by running mox verifydata. Make a fresh backup before upgrading."), backupmoxversion, moxvar.Version)
 	}
 
 	if fail {

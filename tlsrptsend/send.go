@@ -654,7 +654,7 @@ func composeMessage(ctx context.Context, log mlog.Log, mf *os.File, policyDomain
 	messageID = fmt.Sprintf("<%s>", mox.MessageIDGen(xc.SMTPUTF8))
 	xc.Header("Message-Id", messageID)
 	xc.Header("Date", time.Now().Format(message.RFC5322Z))
-	xc.Header("User-Agent", "mox/"+moxvar.Version)
+	xc.Header("User-Agent", moxvar.UserAgent())
 	xc.Header("MIME-Version", "1.0")
 
 	// Multipart message, with a text/plain and the report attached.

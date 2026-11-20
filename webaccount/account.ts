@@ -1,5 +1,5 @@
 /* Javascript is generated from typescript, do not modify generated javascript because changes will be overwritten. */
-import { dom, style, attr, ElemArg } from "../lib"
+import { dom, style, attr, ElemArg, productName, productTitled, productHeaders } from "../lib"
 import * as api from './api'
 
 // From HTML.
@@ -174,6 +174,7 @@ const crumblink = (text: string, path: string) => {
 	}
 }
 const crumbs = (...l: ({text: string, path: string} | string)[]) => {
+	l = l.map(e => typeof e === 'string' ? productTitled(e, moxversion) : {text: productTitled(e.text, moxversion), path: e.path})
 	const crumbtext = (e: {text: string, path: string} | string) => typeof e === 'string' ? e : e.text
 	document.title = l.map(e => crumbtext(e)).join(' - ')
 
@@ -212,8 +213,7 @@ const errmsg = (err: unknown) => ''+((err as any).message || '(no error message)
 const footer = () =>
 	dom.div(
 		style({marginTop: '6ex', opacity: 0.75}),
-		link('https://www.xmox.nl', 'mox'),
-		' ',
+		productName(moxversion) === 'mox' ? [link('https://www.xmox.nl', 'mox'), ' '] : [],
 		moxversion,
                 moxgoos, '/', moxgoarch,
 		', ', dom.a(attr.href('licenses.txt'), 'licenses')
@@ -587,7 +587,7 @@ const index = async () => {
 				Error: error.value,
 				Extra: JSON.parse(extra.value),
 			}
-			const curlStr = "curl " + (outgoingWebhookAuthorization.value ? "-H 'Authorization: "+outgoingWebhookAuthorization.value+"' " : "") + "-H 'X-Mox-Webhook-ID: 1' -H 'X-Mox-Webhook-Attempt: 1' --json '"+JSON.stringify(data)+"' '"+outgoingWebhookURL.value+"'"
+			const curlStr = "curl " + (outgoingWebhookAuthorization.value ? "-H 'Authorization: "+outgoingWebhookAuthorization.value+"' " : "") + productHeaders("-H 'X-Mox-Webhook-ID: 1' -H 'X-Mox-Webhook-Attempt: 1'", moxversion) + " --json '"+JSON.stringify(data)+"' '"+outgoingWebhookURL.value+"'"
 			dom._kids(curl, style({maxWidth: '45em', wordBreak: 'break-all'}), curlStr)
 			body.value = JSON.stringify(data, undefined, "\t")
 		}
@@ -637,7 +637,7 @@ const index = async () => {
 						),
 						dom.div(
 							dom.h2('Headers'),
-							dom.pre('X-Mox-Webhook-ID: 1\nX-Mox-Webhook-Attempt: 1'),
+							dom.pre(productHeaders('X-Mox-Webhook-ID: 1\nX-Mox-Webhook-Attempt: 1', moxversion)),
 							dom.br(),
 							dom.h2('JSON'),
 							body=dom.textarea(attr.disabled(''), attr.rows('15'), style({width: '30em'})),
@@ -707,7 +707,7 @@ const index = async () => {
 				console.log({err})
 				window.alert('Error parsing data: '+errmsg(err))
 			}
-			const curlStr = "curl " + (incomingWebhookAuthorization.value ? "-H 'Authorization: "+incomingWebhookAuthorization.value+"' " : "") + "-H 'X-Mox-Webhook-ID: 1' -H 'X-Mox-Webhook-Attempt: 1' --json '"+JSON.stringify(data)+"' '"+incomingWebhookURL.value+"'"
+			const curlStr = "curl " + (incomingWebhookAuthorization.value ? "-H 'Authorization: "+incomingWebhookAuthorization.value+"' " : "") + productHeaders("-H 'X-Mox-Webhook-ID: 1' -H 'X-Mox-Webhook-Attempt: 1'", moxversion) + " --json '"+JSON.stringify(data)+"' '"+incomingWebhookURL.value+"'"
 			dom._kids(curl, style({maxWidth: '45em', wordBreak: 'break-all'}), curlStr)
 		}
 
@@ -739,7 +739,7 @@ const index = async () => {
 						),
 						dom.div(
 							dom.h2('Headers'),
-							dom.pre('X-Mox-Webhook-ID: 1\nX-Mox-Webhook-Attempt: 1'),
+							dom.pre(productHeaders('X-Mox-Webhook-ID: 1\nX-Mox-Webhook-Attempt: 1', moxversion)),
 							dom.br(),
 
 							dom.h2('curl'),

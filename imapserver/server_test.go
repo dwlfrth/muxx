@@ -898,6 +898,20 @@ func TestID(t *testing.T) {
 	tc.transactf("bad", `id ("name" "mox" "name" "mox")`) // Duplicate field.
 }
 
+// A distribution reports its product name. Distribution is changed only while no
+// server runs, as it is only set at build time otherwise.
+func TestIDDistribution(t *testing.T) {
+	orig := moxvar.Distribution
+	moxvar.Distribution = "muxx-202611191730"
+	defer func() { moxvar.Distribution = orig }()
+
+	tc := start(t, false)
+	defer tc.close()
+	tc.login("mjl@mox.example", password0)
+	tc.transactf("ok", "id nil")
+	tc.xuntagged(imapclient.UntaggedID{"name": "muxx", "version": moxvar.Version})
+}
+
 func TestSequence(t *testing.T) {
 	testSequence(t, false)
 }

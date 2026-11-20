@@ -507,15 +507,15 @@ func fixperms(log mlog.Log, workdir, configdir, datadir string, moxuid, moxgid u
 	fixdata := ensure(datadir, moxuid, 0, fs.ModeSetgid|0750)
 
 	// Binary and systemd service file do not exist (there) when running under docker.
-	binary := filepath.Join(workdir, "mox")
+	binary := filepath.Join(workdir, moxvar.ProductName())
 	if xexists(binary) {
 		ensure(binary, root, moxgid, 0750)
 	}
-	svc := filepath.Join(workdir, "mox.service")
+	svc := filepath.Join(workdir, moxvar.ProductName()+".service")
 	if xexists(svc) {
 		ensure(svc, root, root, 0644)
 	}
-	svc = filepath.Join(workdir, "mox.rc")
+	svc = filepath.Join(workdir, moxvar.ProductName()+".rc")
 	if xexists(svc) {
 		ensure(svc, root, root, 0555)
 	}

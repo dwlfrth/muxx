@@ -210,6 +210,22 @@
 	var prop = /* @__PURE__ */ __name((x) => {
 		return { _props: x };
 	}, "prop");
+	var productName = /* @__PURE__ */ __name((version) => {
+		if (!version || version.indexOf(" (mox ") < 0) {
+			return "mox";
+		}
+		return version.substring(0, version.indexOf(" "));
+	}, "productName");
+	var productTitle = /* @__PURE__ */ __name((version) => {
+		const name = productName(version);
+		return name.charAt(0).toUpperCase() + name.substring(1);
+	}, "productTitle");
+	var productTitled = /* @__PURE__ */ __name((title, version) => title.startsWith("Mox ") ? productTitle(version) + title.substring(3) : title, "productTitled");
+	var productHeaders = /* @__PURE__ */ __name((text, version) => text.split("X-Mox-").join("X-" + productTitle(version) + "-"), "productHeaders");
+	var productVersion = /* @__PURE__ */ __name((version) => {
+		const name = productName(version);
+		return name === "mox" ? version : version.substring(name.length + 1);
+	}, "productVersion");
 
 	// .js/webmail/api.js
 	var Validation;
@@ -2267,7 +2283,7 @@
 			await withDisabled(fieldset, client.SettingsSave(accSet));
 			accountSettings = accSet;
 			remove();
-		}, "submit"), fieldset = dom.fieldset(dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Signature"), signature = dom.textarea(new String(accountSettings.Signature), style({ width: "100%" }), attr.rows("" + Math.max(3, 1 + accountSettings.Signature.split("\n").length)))), dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Reply above/below original"), attr.title("Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top."), quoting = dom.select(dom.option(attr.value(""), "Auto"), dom.option(attr.value("bottom"), "Bottom", accountSettings.Quoting === Quoting.Bottom ? attr.selected("") : []), dom.option(attr.value("top"), "Top", accountSettings.Quoting === Quoting.Top ? attr.selected("") : []))), dom.label(style({ margin: "1ex 0", display: "block" }), showAddressSecurity = dom.input(attr.type("checkbox"), accountSettings.ShowAddressSecurity ? attr.checked("") : []), " Show address security indications", attr.title("Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.")), dom.label(style({ margin: "1ex 0", display: "block" }), showHTML = dom.input(attr.type("checkbox"), accountSettings.ShowHTML ? attr.checked("") : []), " Show email as HTML instead of text by default for first-time senders", attr.title("Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.")), dom.label(style({ margin: "1ex 0", display: "block" }), showShortcuts = dom.input(attr.type("checkbox"), accountSettings.NoShowShortcuts ? [] : attr.checked("")), " Show shortcut keys in bottom left after interaction with mouse"), dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Show additional headers"), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join("\n")), style({ width: "100%" }), attr.rows("" + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: "italic" }), "One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.")), dom.div(style({ marginTop: "2ex" }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton("Register", attr.title("In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present."), /* @__PURE__ */ __name(function click() {
+		}, "submit"), fieldset = dom.fieldset(dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Signature"), signature = dom.textarea(new String(accountSettings.Signature), style({ width: "100%" }), attr.rows("" + Math.max(3, 1 + accountSettings.Signature.split("\n").length)))), dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Reply above/below original"), attr.title("Auto: If text is selected, only the replied text is quoted and editing starts below. Otherwise, the full message is quoted and editing starts at the top."), quoting = dom.select(dom.option(attr.value(""), "Auto"), dom.option(attr.value("bottom"), "Bottom", accountSettings.Quoting === Quoting.Bottom ? attr.selected("") : []), dom.option(attr.value("top"), "Top", accountSettings.Quoting === Quoting.Top ? attr.selected("") : []))), dom.label(style({ margin: "1ex 0", display: "block" }), showAddressSecurity = dom.input(attr.type("checkbox"), accountSettings.ShowAddressSecurity ? attr.checked("") : []), " Show address security indications", attr.title("Show bars underneath address input fields, indicating support for STARTTLS/DNSSEC/DANE/MTA-STS/RequireTLS.")), dom.label(style({ margin: "1ex 0", display: "block" }), showHTML = dom.input(attr.type("checkbox"), accountSettings.ShowHTML ? attr.checked("") : []), " Show email as HTML instead of text by default for first-time senders", attr.title("Whether to show HTML or text is remembered per sender. This sets the default for unknown correspondents.")), dom.label(style({ margin: "1ex 0", display: "block" }), showShortcuts = dom.input(attr.type("checkbox"), accountSettings.NoShowShortcuts ? [] : attr.checked("")), " Show shortcut keys in bottom left after interaction with mouse"), dom.label(style({ margin: "1ex 0", display: "block" }), dom.div("Show additional headers"), showHeaders = dom.textarea(new String((accountSettings.ShowHeaders || []).join("\n")), style({ width: "100%" }), attr.rows("" + Math.max(3, 1 + (accountSettings.ShowHeaders || []).length))), dom.div(style({ fontStyle: "italic" }), productHeaders("One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.", moxversion))), dom.div(style({ marginTop: "2ex" }), 'Register "mailto:" links with the browser/operating system to compose a message in webmail.', dom.br(), dom.clickbutton("Register", attr.title("In most browsers, registering is only allowed on HTTPS URLs. Your browser may ask for confirmation. If nothing appears to happen, the registration may already have been present."), /* @__PURE__ */ __name(function click() {
 			if (!window.navigator.registerProtocolHandler) {
 				window.alert('Registering a protocol handler ("mailto:") is not supported by your browser.');
 				return;
@@ -2361,7 +2377,7 @@
 			["0", "first attachment"],
 			["$", "next attachment"],
 			["d", "download"]
-		].map((t) => dom.tr(dom.td(t[0]), dom.td(t[1])))), dom.div(style({ marginTop: "2ex", marginBottom: "1ex" }), dom.span("Underdotted text", attr.title("Underdotted text shows additional information on hover.")), " show an explanation or additional information when hovered."), dom.div(style({ marginBottom: "1ex" }), "Multiple messages can be selected by clicking messages while holding the control and/or shift keys. Dragging messages and dropping them on a mailbox moves the messages to that mailbox."), dom.div(style({ marginBottom: "1ex" }), "Text that changes ", dom.span(attr.title("Unicode blocks, e.g. from basic latin to cyrillic, or to emoticons."), '"character groups"'), " without whitespace has an ", dom.span(dom._class("scriptswitch"), "orange underline"), ", which can be a sign of an intent to mislead (e.g. phishing)."), dom.div(style({ marginTop: "2ex" }), "Mox is open source email server software, this is version ", moxversion, ", see ", dom.a(attr.href("licenses.txt"), "licenses"), ".", dom.br(), "Feedback, including bug reports, is appreciated! ", link("https://github.com/mjl-/mox/issues/new")))));
+		].map((t) => dom.tr(dom.td(t[0]), dom.td(t[1])))), dom.div(style({ marginTop: "2ex", marginBottom: "1ex" }), dom.span("Underdotted text", attr.title("Underdotted text shows additional information on hover.")), " show an explanation or additional information when hovered."), dom.div(style({ marginBottom: "1ex" }), "Multiple messages can be selected by clicking messages while holding the control and/or shift keys. Dragging messages and dropping them on a mailbox moves the messages to that mailbox."), dom.div(style({ marginBottom: "1ex" }), "Text that changes ", dom.span(attr.title("Unicode blocks, e.g. from basic latin to cyrillic, or to emoticons."), '"character groups"'), " without whitespace has an ", dom.span(dom._class("scriptswitch"), "orange underline"), ", which can be a sign of an intent to mislead (e.g. phishing)."), dom.div(style({ marginTop: "2ex" }), productTitle(moxversion) + " is open source email server software, this is version ", moxversion, ", see ", dom.a(attr.href("licenses.txt"), "licenses"), ".", dom.br(), "Feedback, including bug reports, is appreciated! ", link("https://github.com/mjl-/mox/issues/new")))));
 	}, "cmdHelp");
 	var cmdTooltip = /* @__PURE__ */ __name(async () => {
 		let elems = [];
@@ -2536,7 +2552,7 @@
 				Cc: ccViews.map((v) => v.input.value).filter((s) => s),
 				Bcc: bccViews.map((v) => v.input.value).filter((s) => s),
 				ReplyTo: replyTo,
-				UserAgent: "moxwebmail/" + moxversion,
+				UserAgent: productName(moxversion) + "webmail/" + productVersion(moxversion),
 				Subject: subject.value,
 				TextBody: body.value,
 				Attachments: files,
@@ -6028,9 +6044,9 @@
 			const mb = mailboxlistView && mailboxlistView.activeMailbox();
 			const addr = loginAddress ? loginAddress.User + "@" + formatDomain(loginAddress.Domain) : "";
 			if (!mb) {
-				document.title = [addr, "Mox Webmail"].join(" - ");
+				document.title = [addr, productTitled("Mox Webmail", moxversion)].join(" - ");
 			} else {
-				document.title = ["(" + mb.Unread + ") " + mb.Name, addr, "Mox Webmail"].join(" - ");
+				document.title = ["(" + mb.Unread + ") " + mb.Name, addr, productTitled("Mox Webmail", moxversion)].join(" - ");
 			}
 		}, "updatePageTitle");
 		const faviconLink = document.head.querySelector('link[rel="icon"]');
@@ -6825,7 +6841,7 @@
 					window.clearTimeout(eventID);
 					eventID = 0;
 				}
-				document.title = ["(not connected)", loginAddress ? loginAddress.User + "@" + formatDomain(loginAddress.Domain) : "", "Mox Webmail"].filter((s) => s).join(" - ");
+				document.title = ["(not connected)", loginAddress ? loginAddress.User + "@" + formatDomain(loginAddress.Domain) : "", productTitled("Mox Webmail", moxversion)].filter((s) => s).join(" - ");
 				dom._kids(connectionElem);
 				if (autoReconnect < 1) {
 					let msg = capitalizeFirst(errmsg2);
@@ -7106,7 +7122,7 @@
 		const xerrmsg = err.toString();
 		const box = dom.div(css("unhandledErrorBox", { position: "absolute", bottom: "1ex", left: "1ex", backgroundColor: "rgba(255, 110, 110, .9)", maxWidth: "14em", padding: ".25em .5em", borderRadius: ".25em", fontSize: ".8em", wordBreak: "break-all", zIndex: zindexes.shortcut }), dom.div(style({ marginBottom: ".5ex" }), "" + xerrmsg), dom.clickbutton("Details", /* @__PURE__ */ __name(function click() {
 			box.remove();
-			let msg = `Mox version: ${moxversion} (${moxgoos}/${moxgoarch})
+			let msg = `${productTitle(moxversion)} version: ${moxversion} (${moxgoos}/${moxgoarch})
 Browser: ${window.navigator.userAgent}
 File: webmail.html
 Lineno: ${lineno || "-"}
@@ -7121,7 +7137,7 @@ Details of the error and browser:
 
 \`\`\`
 ` + msg + "```\n";
-			const remove = popup(style({ maxWidth: "60em" }), dom.h1("A JavaScript error occurred"), dom.pre(dom._class("mono"), css("unhandledErrorMsg", { backgroundColor: styles.backgroundColorMild, padding: "1ex", borderRadius: ".15em", border: "1px solid", borderColor: styles.borderColor, whiteSpace: "pre-wrap" }), msg), dom.br(), dom.div("There is a good chance this is a bug in Mox Webmail."), dom.div('Consider filing a bug report ("issue") at ', link("https://github.com/mjl-/mox/issues/new?title=" + encodeURIComponent('mox webmail js error: "' + xerrmsg + '"') + "&body=" + encodeURIComponent(body), "https://github.com/mjl-/mox/issues/new"), ". The link includes the error details."), dom.div("Before reporting you could check previous ", link('https://github.com/mjl-/mox/issues?q=is%3Aissue+"mox+webmail+js+error%3A"', "webmail bug reports"), "."), dom.br(), dom.div("Your feedback will help improve mox, thanks!"), dom.br(), dom.div(style({ textAlign: "right" }), dom.clickbutton("Close and silence errors for 1 week", /* @__PURE__ */ __name(function click2() {
+			const remove = popup(style({ maxWidth: "60em" }), dom.h1("A JavaScript error occurred"), dom.pre(dom._class("mono"), css("unhandledErrorMsg", { backgroundColor: styles.backgroundColorMild, padding: "1ex", borderRadius: ".15em", border: "1px solid", borderColor: styles.borderColor, whiteSpace: "pre-wrap" }), msg), dom.br(), dom.div("There is a good chance this is a bug in " + productTitled("Mox Webmail", moxversion) + "."), dom.div('Consider filing a bug report ("issue") at ', link("https://github.com/mjl-/mox/issues/new?title=" + encodeURIComponent('mox webmail js error: "' + xerrmsg + '"') + "&body=" + encodeURIComponent(body), "https://github.com/mjl-/mox/issues/new"), ". The link includes the error details."), dom.div("Before reporting you could check previous ", link('https://github.com/mjl-/mox/issues?q=is%3Aissue+"mox+webmail+js+error%3A"', "webmail bug reports"), "."), dom.br(), dom.div("Your feedback will help improve mox, thanks!"), dom.br(), dom.div(style({ textAlign: "right" }), dom.clickbutton("Close and silence errors for 1 week", /* @__PURE__ */ __name(function click2() {
 				remove();
 				settingsPut({ ...settings, ignoreErrorsUntil: Math.round((/* @__PURE__ */ new Date()).getTime() / 1e3 + 7 * 24 * 3600) });
 			}, "click")), " ", dom.clickbutton("Close", /* @__PURE__ */ __name(function click2() {

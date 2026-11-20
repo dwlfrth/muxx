@@ -82,7 +82,7 @@ Enable consistency checking in UI updates:
 - todo: mobile-friendly version. should perhaps be a completely different app, because it is so different.
 */
 
-import {dom, style, attr, prop, ElemArg} from '../lib'
+import {dom, style, attr, prop, ElemArg, productName, productTitle, productTitled, productVersion, productHeaders} from '../lib'
 import {css, ensureCSS, styles, styleClasses, equalAddress, formatAddress, formatAddressShort, formatEmail, loadMsgheaderView, isImage, renderText, formatDomain, join} from './lib'
 import * as api from './api'
 import * as icons from './icons'
@@ -1235,7 +1235,7 @@ const cmdSettings = async () => {
 						style({width: '100%'}),
 						attr.rows(''+Math.max(3, 1+(accountSettings.ShowHeaders || []).length)),
 					),
-					dom.div(style({fontStyle: 'italic'}), 'One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.'),
+					dom.div(style({fontStyle: 'italic'}), productHeaders('One header name per line, for example Delivered-To, X-Mox-Reason, User-Agent, ...; Refresh mailbox view for changes to take effect.', moxversion)),
 				),
 
 
@@ -1398,7 +1398,7 @@ const cmdHelp = async () => {
 				dom.div(style({marginBottom: '1ex'}), 'Multiple messages can be selected by clicking messages while holding the control and/or shift keys. Dragging messages and dropping them on a mailbox moves the messages to that mailbox.'),
 				dom.div(style({marginBottom: '1ex'}), 'Text that changes ', dom.span(attr.title('Unicode blocks, e.g. from basic latin to cyrillic, or to emoticons.'), '"character groups"'), ' without whitespace has an ', dom.span(dom._class('scriptswitch'), 'orange underline'), ', which can be a sign of an intent to mislead (e.g. phishing).'),
 
-				dom.div(style({marginTop: '2ex'}), 'Mox is open source email server software, this is version ', moxversion, ', see ', dom.a(attr.href('licenses.txt'), 'licenses'), '.', dom.br(), 'Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new')),
+				dom.div(style({marginTop: '2ex'}), productTitle(moxversion)+' is open source email server software, this is version ', moxversion, ', see ', dom.a(attr.href('licenses.txt'), 'licenses'), '.', dom.br(), 'Feedback, including bug reports, is appreciated! ', link('https://github.com/mjl-/mox/issues/new')),
 			),
 		),
 	)
@@ -1676,7 +1676,7 @@ const compose = (opts: ComposeOptions, listMailboxes: listMailboxes, setLocation
 			Cc: ccViews.map(v => v.input.value).filter(s => s),
 			Bcc: bccViews.map(v => v.input.value).filter(s => s),
 			ReplyTo: replyTo,
-			UserAgent: 'moxwebmail/'+moxversion,
+			UserAgent: productName(moxversion)+'webmail/'+productVersion(moxversion),
 			Subject: subject.value,
 			TextBody: body.value,
 			Attachments: files,
@@ -6507,9 +6507,9 @@ const init = async () => {
 		const mb = mailboxlistView && mailboxlistView.activeMailbox()
 		const addr = loginAddress ? loginAddress.User+'@'+formatDomain(loginAddress.Domain) : ''
 		if (!mb) {
-			document.title = [addr, 'Mox Webmail'].join(' - ')
+			document.title = [addr, productTitled('Mox Webmail', moxversion)].join(' - ')
 		} else {
-			document.title = ['('+mb.Unread+') '+mb.Name, addr, 'Mox Webmail'].join(' - ')
+			document.title = ['('+mb.Unread+') '+mb.Name, addr, productTitled('Mox Webmail', moxversion)].join(' - ')
 		}
 	}
 
@@ -7656,7 +7656,7 @@ const init = async () => {
 				window.clearTimeout(eventID)
 				eventID = 0
 			}
-			document.title = ['(not connected)', loginAddress ? (loginAddress.User+'@'+formatDomain(loginAddress.Domain)) : '', 'Mox Webmail'].filter(s => s).join(' - ')
+			document.title = ['(not connected)', loginAddress ? (loginAddress.User+'@'+formatDomain(loginAddress.Domain)) : '', productTitled('Mox Webmail', moxversion)].filter(s => s).join(' - ')
 			dom._kids(connectionElem)
 			if (autoReconnect < 1) {
 				let msg = capitalizeFirst(errmsg)
@@ -7981,7 +7981,7 @@ const showUnhandledError = (err: Error, lineno: number, colno: number) => {
 		dom.div(style({marginBottom: '.5ex'}), ''+xerrmsg),
 		dom.clickbutton('Details', function click() {
 			box.remove()
-			let msg = `Mox version: ${moxversion} (${moxgoos}/${moxgoarch})
+			let msg = `${productTitle(moxversion)} version: ${moxversion} (${moxgoos}/${moxgoarch})
 Browser: ${window.navigator.userAgent}
 File: webmail.html
 Lineno: ${lineno || '-'}
@@ -8005,7 +8005,7 @@ Details of the error and browser:
 					msg,
 				),
 				dom.br(),
-				dom.div('There is a good chance this is a bug in Mox Webmail.'),
+				dom.div('There is a good chance this is a bug in '+productTitled('Mox Webmail', moxversion)+'.'),
 				dom.div('Consider filing a bug report ("issue") at ', link('https://github.com/mjl-/mox/issues/new?title='+encodeURIComponent('mox webmail js error: "'+xerrmsg+'"')+'&body='+encodeURIComponent(body), 'https://github.com/mjl-/mox/issues/new'), '. The link includes the error details.'),
 				dom.div('Before reporting you could check previous ', link('https://github.com/mjl-/mox/issues?q=is%3Aissue+"mox+webmail+js+error%3A"', 'webmail bug reports'), '.'),
 				dom.br(),

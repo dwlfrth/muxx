@@ -30,6 +30,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"slices"
+
+	"github.com/mjl-/mox/moxvar"
 )
 
 var noctx = context.Background()
@@ -380,6 +382,9 @@ func (h *handler) Handle(ctx context.Context, r slog.Record) error {
 		r.Message = "..."
 	} else if hideAuth {
 		r.Message = "***"
+	} else if r.Level >= LevelDebug {
+		// Not for trace levels: those log protocol transcripts, which must stay as sent.
+		r.Message = moxvar.Rename(r.Message)
 	}
 	return h.write(l, r)
 }

@@ -52,6 +52,7 @@ import (
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/moxio"
+	"github.com/mjl-/mox/moxvar"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/queue"
 	"github.com/mjl-/mox/ratelimit"
@@ -1005,7 +1006,7 @@ func serve(listenerName string, cid int64, hostname dns.Domain, tlsConfig *tls.C
 	// We include the string ESMTP. https://cr.yp.to/smtp/greeting.html recommends it.
 	// Should not be too relevant nowadays, but does not hurt and default blackbox
 	// exporter SMTP health check expects it.
-	c.xwritelinef("%d %s ESMTP mox", smtp.C220ServiceReady, c.hostname.ASCII)
+	c.xwritelinef("%d %s ESMTP %s", smtp.C220ServiceReady, c.hostname.ASCII, moxvar.ProductName())
 
 	for {
 		command(c)
@@ -2411,13 +2412,13 @@ func (c *conn) submit(ctx context.Context, recvHdrFor func(string) string, msgWr
 	// todo: should we not canonicalize keys?
 	var extra map[string]string
 	for k, vl := range header {
-		if !strings.HasPrefix(k, "X-Mox-Extra-") {
+		if !strings.HasPrefix(k, moxvar.HeaderPrefix()+"Extra-") {
 			continue
 		}
 		if extra == nil {
 			extra = map[string]string{}
 		}
-		xk := k[len("X-Mox-Extra-"):]
+		xk := k[len(moxvar.HeaderPrefix()+"Extra-"):]
 		// We don't allow duplicate keys.
 		if _, ok := extra[xk]; ok || len(vl) > 1 {
 			xsmtpUserErrorf(smtp.C554TransactionFailed, smtp.SeMsg6Other0, "duplicate x-mox-extra- key %q", xk)
@@ -3218,7 +3219,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		var xmox string
 		if a0.reason != "" {
 			hw := &message.HeaderWriter{}
-			hw.Add(" ", "X-Mox-Reason:")
+			hw.Add(" ", moxvar.HeaderPrefix()+"Reason:")
 			hw.Add(" ", a0.reason)
 			for i, s := range a0.reasonText {
 				if i == 0 {

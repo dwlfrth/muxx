@@ -207,6 +207,18 @@
 	var style = /* @__PURE__ */ __name((x) => {
 		return { _styles: x };
 	}, "style");
+	var productName = /* @__PURE__ */ __name((version) => {
+		if (!version || version.indexOf(" (mox ") < 0) {
+			return "mox";
+		}
+		return version.substring(0, version.indexOf(" "));
+	}, "productName");
+	var productTitle = /* @__PURE__ */ __name((version) => {
+		const name = productName(version);
+		return name.charAt(0).toUpperCase() + name.substring(1);
+	}, "productTitle");
+	var productTitled = /* @__PURE__ */ __name((title, version) => title.startsWith("Mox ") ? productTitle(version) + title.substring(3) : title, "productTitled");
+	var productHeaders = /* @__PURE__ */ __name((text, version) => text.split("X-Mox-").join("X-" + productTitle(version) + "-"), "productHeaders");
 
 	// .js/webaccount/api.js
 	var OutgoingEvent;
@@ -1026,6 +1038,7 @@
 		};
 	}, "crumblink");
 	var crumbs = /* @__PURE__ */ __name((...l) => {
+		l = l.map((e) => typeof e === "string" ? productTitled(e, moxversion) : { text: productTitled(e.text, moxversion), path: e.path });
 		const crumbtext = /* @__PURE__ */ __name((e) => typeof e === "string" ? e : e.text, "crumbtext");
 		document.title = l.map((e) => crumbtext(e)).join(" - ");
 		const crumblink2 = /* @__PURE__ */ __name((e) => typeof e === "string" ? prewrap(e) : dom.a(e.text, attr.href(e.path)), "crumblink");
@@ -1050,7 +1063,7 @@
 		];
 	}, "crumbs");
 	var errmsg = /* @__PURE__ */ __name((err) => "" + (err.message || "(no error message)"), "errmsg");
-	var footer = /* @__PURE__ */ __name(() => dom.div(style({ marginTop: "6ex", opacity: 0.75 }), link("https://www.xmox.nl", "mox"), " ", moxversion, moxgoos, "/", moxgoarch, ", ", dom.a(attr.href("licenses.txt"), "licenses")), "footer");
+	var footer = /* @__PURE__ */ __name(() => dom.div(style({ marginTop: "6ex", opacity: 0.75 }), productName(moxversion) === "mox" ? [link("https://www.xmox.nl", "mox"), " "] : [], moxversion, moxgoos, "/", moxgoarch, ", ", dom.a(attr.href("licenses.txt"), "licenses")), "footer");
 	var domainName = /* @__PURE__ */ __name((d) => {
 		return d.Unicode || d.ASCII;
 	}, "domainName");
@@ -1355,7 +1368,7 @@
 					Error: error.value,
 					Extra: JSON.parse(extra.value)
 				};
-				const curlStr = "curl " + (outgoingWebhookAuthorization.value ? "-H 'Authorization: " + outgoingWebhookAuthorization.value + "' " : "") + "-H 'X-Mox-Webhook-ID: 1' -H 'X-Mox-Webhook-Attempt: 1' --json '" + JSON.stringify(data) + "' '" + outgoingWebhookURL.value + "'";
+				const curlStr = "curl " + (outgoingWebhookAuthorization.value ? "-H 'Authorization: " + outgoingWebhookAuthorization.value + "' " : "") + productHeaders("-H 'X-Mox-Webhook-ID: 1' -H 'X-Mox-Webhook-Attempt: 1'", moxversion) + " --json '" + JSON.stringify(data) + "' '" + outgoingWebhookURL.value + "'";
 				dom._kids(curl, style({ maxWidth: "45em", wordBreak: "break-all" }), curlStr);
 				body.value = JSON.stringify(data, void 0, "	");
 			}, "change");
@@ -1367,7 +1380,7 @@
 				const nresult = dom.div(dom._class("loadend"), dom.table(dom.tr(dom.td("HTTP status code"), dom.td("" + code)), dom.tr(dom.td("Error message"), dom.td(errmsg2)), dom.tr(dom.td("Response"), dom.td(response))));
 				result.replaceWith(nresult);
 				result = nresult;
-			}, "submit"), fieldset = dom.fieldset(dom.p("Make a test call to ", dom.b(outgoingWebhookURL.value), "."), dom.div(style({ display: "flex", gap: "1em" }), dom.div(dom.h2("Parameters"), dom.div(style({ marginBottom: ".5ex" }), dom.label("Event", dom.div(event = dom.select(onchange, ["delivered", "suppressed", "delayed", "failed", "relayed", "expanded", "canceled", "unrecognized"].map((s) => dom.option(s.substring(0, 1).toUpperCase() + s.substring(1), attr.value(s))))))), dom.div(style({ marginBottom: ".5ex" }), dom.label(dsn = dom.input(attr.type("checkbox")), " DSN", onchange)), dom.div(style({ marginBottom: ".5ex" }), dom.label(suppressing = dom.input(attr.type("checkbox")), " Suppressing", onchange)), dom.div(style({ marginBottom: ".5ex" }), dom.label("Queue message ID ", dom.div(queueMsgID = dom.input(attr.required(""), attr.type("number"), attr.value("123"), onchange)))), dom.div(style({ marginBottom: ".5ex" }), dom.label("From ID ", dom.div(fromID = dom.input(attr.required(""), attr.value(data.FromID), onchange)))), dom.div(style({ marginBottom: ".5ex" }), dom.label("MessageID", dom.div(messageID = dom.input(attr.required(""), attr.value(data.MessageID), onchange)))), dom.div(style({ marginBottom: ".5ex" }), dom.label("Error", dom.div(error = dom.input(onchange)))), dom.div(style({ marginBottom: ".5ex" }), dom.label("Extra", dom.div(extra = dom.input(attr.required(""), attr.value("{}"), onchange))))), dom.div(dom.h2("Headers"), dom.pre("X-Mox-Webhook-ID: 1\nX-Mox-Webhook-Attempt: 1"), dom.br(), dom.h2("JSON"), body = dom.textarea(attr.disabled(""), attr.rows("15"), style({ width: "30em" })), dom.br(), dom.h2("curl"), curl = dom.div(dom._class("literal")))), dom.br(), dom.div(style({ textAlign: "right" }), dom.submitbutton("Post")), dom.br(), result = dom.div())));
+			}, "submit"), fieldset = dom.fieldset(dom.p("Make a test call to ", dom.b(outgoingWebhookURL.value), "."), dom.div(style({ display: "flex", gap: "1em" }), dom.div(dom.h2("Parameters"), dom.div(style({ marginBottom: ".5ex" }), dom.label("Event", dom.div(event = dom.select(onchange, ["delivered", "suppressed", "delayed", "failed", "relayed", "expanded", "canceled", "unrecognized"].map((s) => dom.option(s.substring(0, 1).toUpperCase() + s.substring(1), attr.value(s))))))), dom.div(style({ marginBottom: ".5ex" }), dom.label(dsn = dom.input(attr.type("checkbox")), " DSN", onchange)), dom.div(style({ marginBottom: ".5ex" }), dom.label(suppressing = dom.input(attr.type("checkbox")), " Suppressing", onchange)), dom.div(style({ marginBottom: ".5ex" }), dom.label("Queue message ID ", dom.div(queueMsgID = dom.input(attr.required(""), attr.type("number"), attr.value("123"), onchange)))), dom.div(style({ marginBottom: ".5ex" }), dom.label("From ID ", dom.div(fromID = dom.input(attr.required(""), attr.value(data.FromID), onchange)))), dom.div(style({ marginBottom: ".5ex" }), dom.label("MessageID", dom.div(messageID = dom.input(attr.required(""), attr.value(data.MessageID), onchange)))), dom.div(style({ marginBottom: ".5ex" }), dom.label("Error", dom.div(error = dom.input(onchange)))), dom.div(style({ marginBottom: ".5ex" }), dom.label("Extra", dom.div(extra = dom.input(attr.required(""), attr.value("{}"), onchange))))), dom.div(dom.h2("Headers"), dom.pre(productHeaders("X-Mox-Webhook-ID: 1\nX-Mox-Webhook-Attempt: 1", moxversion)), dom.br(), dom.h2("JSON"), body = dom.textarea(attr.disabled(""), attr.rows("15"), style({ width: "30em" })), dom.br(), dom.h2("curl"), curl = dom.div(dom._class("literal")))), dom.br(), dom.div(style({ textAlign: "right" }), dom.submitbutton("Post")), dom.br(), result = dom.div())));
 			onchange();
 		}, "popupTestOutgoing");
 		const popupTestIncoming = /* @__PURE__ */ __name(() => {
@@ -1418,7 +1431,7 @@
 					console.log({ err });
 					window.alert("Error parsing data: " + errmsg(err));
 				}
-				const curlStr = "curl " + (incomingWebhookAuthorization.value ? "-H 'Authorization: " + incomingWebhookAuthorization.value + "' " : "") + "-H 'X-Mox-Webhook-ID: 1' -H 'X-Mox-Webhook-Attempt: 1' --json '" + JSON.stringify(data) + "' '" + incomingWebhookURL.value + "'";
+				const curlStr = "curl " + (incomingWebhookAuthorization.value ? "-H 'Authorization: " + incomingWebhookAuthorization.value + "' " : "") + productHeaders("-H 'X-Mox-Webhook-ID: 1' -H 'X-Mox-Webhook-Attempt: 1'", moxversion) + " --json '" + JSON.stringify(data) + "' '" + incomingWebhookURL.value + "'";
 				dom._kids(curl, style({ maxWidth: "45em", wordBreak: "break-all" }), curlStr);
 			}, "change");
 			popup(dom.h1("Test webhook for incoming delivery"), dom.form(/* @__PURE__ */ __name(async function submit(e) {
@@ -1429,7 +1442,7 @@
 				const nresult = dom.div(dom._class("loadend"), dom.table(dom.tr(dom.td("HTTP status code"), dom.td("" + code)), dom.tr(dom.td("Error message"), dom.td(errmsg2)), dom.tr(dom.td("Response"), dom.td(response))));
 				result.replaceWith(nresult);
 				result = nresult;
-			}, "submit"), fieldset = dom.fieldset(dom.p("Make a test call to ", dom.b(incomingWebhookURL.value), "."), dom.div(style({ display: "flex", gap: "1em" }), dom.div(dom.h2("JSON"), body = dom.textarea(style({ maxHeight: "90vh" }), style({ width: "30em" }), onchange)), dom.div(dom.h2("Headers"), dom.pre("X-Mox-Webhook-ID: 1\nX-Mox-Webhook-Attempt: 1"), dom.br(), dom.h2("curl"), curl = dom.div(dom._class("literal")))), dom.br(), dom.div(style({ textAlign: "right" }), dom.submitbutton("Post")), dom.br(), result = dom.div())));
+			}, "submit"), fieldset = dom.fieldset(dom.p("Make a test call to ", dom.b(incomingWebhookURL.value), "."), dom.div(style({ display: "flex", gap: "1em" }), dom.div(dom.h2("JSON"), body = dom.textarea(style({ maxHeight: "90vh" }), style({ width: "30em" }), onchange)), dom.div(dom.h2("Headers"), dom.pre(productHeaders("X-Mox-Webhook-ID: 1\nX-Mox-Webhook-Attempt: 1", moxversion)), dom.br(), dom.h2("curl"), curl = dom.div(dom._class("literal")))), dom.br(), dom.div(style({ textAlign: "right" }), dom.submitbutton("Post")), dom.br(), result = dom.div())));
 			body.value = JSON.stringify(data, void 0, "	");
 			body.setAttribute("rows", "" + Math.min(40, body.value.split("\n").length + 1));
 			onchange();

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mjl-/mox/mlog"
+	"github.com/mjl-/mox/moxvar"
 )
 
 // WebappFile serves a merged HTML and JS webapp as a single compressed, cacheable
@@ -160,6 +161,9 @@ func (a *WebappFile) Serve(ctx context.Context, log mlog.Log, w http.ResponseWri
 					return false
 				}
 			}
+
+			// For builds as a distribution, the page title uses its name.
+			html := moxvar.RenameTitle(html)
 
 			cssp := []byte(`/* css placeholder */`)
 			cssi := bytes.Index(html, cssp)

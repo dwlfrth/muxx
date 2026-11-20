@@ -162,7 +162,7 @@ during those commands instead of during "data".
 
 	loadLoglevel(log, fallbackLevel)
 
-	golog.Printf("mox, version %s %s/%s", moxvar.Version, runtime.GOOS, runtime.GOARCH)
+	golog.Printf("%s, version %s %s/%s", moxvar.ProductName(), moxvar.Version, runtime.GOOS, runtime.GOARCH)
 	golog.Print("")
 	golog.Printf("the default user is mox@localhost, with password moxmoxmox")
 	golog.Printf("the default admin password is moxadmin")
@@ -392,7 +392,7 @@ func writeLocalConfig(log mlog.Log, dir, ip string) (rerr error) {
 	err = sconf.WriteDocs(&moxconfBuf, static)
 	xcheck(err, "making mox.conf")
 
-	err = os.WriteFile(filepath.Join(dir, "mox.conf"), moxconfBuf.Bytes(), 0660)
+	err = os.WriteFile(filepath.Join(dir, moxvar.ConfigFileName()), moxconfBuf.Bytes(), 0660)
 	xcheck(err, "writing mox.conf")
 
 	// Write domains.conf.
@@ -504,7 +504,7 @@ func loadLoglevel(log mlog.Log, fallback string) {
 }
 
 func localLoadConfig(log mlog.Log, dir string) error {
-	mox.ConfigStaticPath = filepath.Join(dir, "mox.conf")
+	mox.ConfigStaticPath = filepath.Join(dir, moxvar.ConfigFileName())
 	mox.ConfigDynamicPath = filepath.Join(dir, "domains.conf")
 	errs := mox.LoadConfig(context.Background(), log, true, false)
 	if len(errs) > 1 {

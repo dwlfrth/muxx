@@ -28,12 +28,12 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/mjl-/mox/autotls"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/imapserver"
+	"github.com/mjl-/mox/metrics"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/ratelimit"
@@ -818,7 +818,7 @@ func portServes(name string, l config.Listener) map[int]*serve {
 	if l.MetricsHTTP.Enabled {
 		port := config.Port(l.MetricsHTTP.Port, 8010)
 		srv := ensureServe(false, false, false, port, "metrics-http", false)
-		srv.SystemHandle("metrics", nil, "/metrics", mox.SafeHeaders(promhttp.Handler()))
+		srv.SystemHandle("metrics", nil, "/metrics", mox.SafeHeaders(metrics.Handler()))
 		srv.SystemHandle("health", nil, "/health", mox.SafeHeaders(http.HandlerFunc(healthHandle)))
 		srv.SystemHandle("metrics", nil, "/", mox.SafeHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" {
