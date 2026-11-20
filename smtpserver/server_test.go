@@ -586,7 +586,11 @@ func TestSendOnly(t *testing.T) {
 		mailFrom := "remote@example.org"
 		rcptTo := "mjl@mox2.example"
 		err := client.Deliver(ctxbg, mailFrom, rcptTo, int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
-		ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
+		cerr := ts.smtpErr(err, &smtpclient.Error{Permanent: true, Code: smtp.C550MailboxUnavail, Secode: smtp.SeAddr1UnknownDestMailbox1})
+		// Rejected for the recipient, before the message is transferred.
+		if cerr.Command != "rcptto" {
+			ts.t.Fatalf("incoming delivery to send-only domain rejected at %q, expected at rcptto", cerr.Command)
+		}
 	})
 	ts.checkCount("Inbox", 0)
 
