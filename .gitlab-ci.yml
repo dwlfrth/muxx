@@ -8,6 +8,15 @@
 stages:
 - test
 - secret-detection
+
+# Branch pipelines only, as before the rules below: without this, the jobs'
+# catch-all rule would also add a merge request pipeline to every push to an MR
+# branch, running everything twice.
+workflow:
+  rules:
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    when: never
+  - when: always
 sast:
   stage: test
 include:
@@ -16,9 +25,46 @@ include:
 secret_detection:
   stage: secret-detection
 
+# The project runs this file from main for every branch (CI/CD configuration
+# file ".gitlab-ci.yml@<group>/muxx:main"), so feature branches from upstream,
+# which have no CI file, get pipelines too. A branch with its own, changed
+# version of this file is tested with that version instead: "ci-changes" runs it
+# as a child pipeline, and the jobs that extend .skip-when-ci-changes skip
+# themselves in the parent, so they run once. Upstream-based branches lack the
+# file, hence "exists".
+.skip-when-ci-changes:
+  rules:
+  - if: $CI_PIPELINE_SOURCE != "parent_pipeline"
+    exists:
+    - .gitlab-ci.yml
+    changes:
+      paths:
+      - .gitlab-ci.yml
+      compare_to: refs/heads/main
+    when: never
+  - when: on_success
+
+ci-changes:
+  stage: test
+  rules:
+  - if: $CI_PIPELINE_SOURCE != "parent_pipeline" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+    exists:
+    - .gitlab-ci.yml
+    changes:
+      paths:
+      - .gitlab-ci.yml
+      compare_to: refs/heads/main
+  trigger:
+    include:
+    - project: $CI_PROJECT_PATH
+      ref: $CI_COMMIT_SHA
+      file: .gitlab-ci.yml
+    strategy: depend
+
 # Same steps as upstream's .github/workflows/build-test.yml, on Go stable and
 # oldstable with Node 24. The Makefile runs npm ci itself when needed.
 gates:
+  extends: .skip-when-ci-changes
   stage: test
   image: golang:${GO_VERSION}-trixie
   parallel:
@@ -43,8 +89,10 @@ gates:
 # versions, the vulnerability scan, and actionlint on muxx's own workflow, all
 # blocking. staticcheck skips SA1019: its findings are deprecations in upstream's
 # code (CLAUDE.md, "Do not fix"). actionlint checks the workflow's shell scripts
-# only when shellcheck is installed, hence the install.
+# only when shellcheck is installed, hence the install. Branches from upstream
+# don't have the workflow, so both are skipped there.
 checks:
+  extends: .skip-when-ci-changes
   stage: test
   image: golang:1.27-trixie
   variables:
@@ -55,12 +103,18 @@ checks:
   - go run github.com/gordonklaus/ineffassign@v0.1.0 ./...
   - go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 -checks inherit,-SA1019 ./...
   - go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...
-  - apt-get update -qq && apt-get install -y -qq shellcheck >/dev/null
-  - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/muxx-image.yml
+  - |
+    if [ -f .github/workflows/muxx-image.yml ]; then
+      apt-get update -qq && apt-get install -y -qq shellcheck >/dev/null
+      go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/muxx-image.yml
+    else
+      echo "no muxx image workflow on this branch, actionlint skipped"
+    fi
 
 # The whole test suite under the race detector, with upstream's target. Go
 # stable only, to save compute minutes; oldstable is covered by "gates".
 race:
+  extends: .skip-when-ci-changes
   stage: test
   image: golang:1.27-trixie
   script:
