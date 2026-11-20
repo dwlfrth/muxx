@@ -64,15 +64,17 @@ show it. The image workflow refuses a tag whose commit is not on `main`.
 it checks that the tag is annotated, named `muxx-YYYYMMDDHHMM` and on a commit
 made on `main` itself (a merge commit, not one of a merged branch), and that
 the release was not pushed before (a moved tag must not replace an image),
-builds for linux/amd64 and linux/arm64, checks the version of the amd64 build
-(release named, no local changes), and pushes it to
-`ghcr.io/dwlfrth/muxx:<release>`, never `latest`. On `main`, when the image
-files change, it only builds. `Dockerfile.muxx` builds with the Go version CI
-tests with (`golang:1.27-alpine`): bump it together with CI's 1.27. The
-workflow's actions are pinned by commit, with the
-version as comment; bump them by hand. `Dockerfile.muxx.dockerignore` keeps
-`.git` in the build context for the version stamp: excluding a tracked file
-there makes every image report local changes.
+builds for linux/amd64, checks the version of the build (release named, no
+local changes), and pushes it to `ghcr.io/dwlfrth/muxx:<release>`, never
+`latest`. On `main`, when the image files change, it only builds. Only
+linux/amd64 is built, the platform of the servers that run muxx: arm64 was
+built at first, under emulation, and took most of each run's time for a
+platform nothing runs. `Dockerfile.muxx` builds with the Go version CI tests
+with (`golang:1.27-alpine`): bump it together with CI's 1.27. The workflow's
+actions are pinned by commit, with the version as comment; bump them by hand.
+`Dockerfile.muxx.dockerignore` keeps `.git` in the build context for the
+version stamp: excluding a tracked file there makes every image report local
+changes.
 
 Everything muxx calls itself derives from one build variable,
 `moxvar.Distribution`, in `moxvar/distribution.go`: without it, a build is plain
