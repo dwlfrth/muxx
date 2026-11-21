@@ -1990,6 +1990,25 @@
 			"Returns": []
 		},
 		{
+			"Name": "DomainSendOnlySave",
+			"Docs": "DomainSendOnlySave saves the SendOnly setting for a domain. A send-only domain\ndoes not receive email on this host.",
+			"Params": [
+				{
+					"Name": "domainName",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
+					"Name": "sendOnly",
+					"Typewords": [
+						"bool"
+					]
+				}
+			],
+			"Returns": []
+		},
+		{
 			"Name": "AliasAdd",
 			"Docs": "",
 			"Params": [
@@ -3441,6 +3460,13 @@
 			"Fields": [
 				{
 					"Name": "Disabled",
+					"Docs": "",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "SendOnly",
 					"Docs": "",
 					"Typewords": [
 						"bool"

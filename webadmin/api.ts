@@ -265,6 +265,7 @@ export interface AutodiscoverSRV {
 
 export interface ConfigDomain {
 	Disabled: boolean
+	SendOnly: boolean
 	Description: string
 	ClientSettingsDomain: string
 	LocalpartCatchallSeparator: string
@@ -1195,7 +1196,7 @@ export const types: TypenameMap = {
 	"AutoconfCheckResult": {"Name":"AutoconfCheckResult","Docs":"","Fields":[{"Name":"ClientSettingsDomainIPs","Docs":"","Typewords":["[]","string"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]},{"Name":"Warnings","Docs":"","Typewords":["[]","string"]},{"Name":"Instructions","Docs":"","Typewords":["[]","string"]}]},
 	"AutodiscoverCheckResult": {"Name":"AutodiscoverCheckResult","Docs":"","Fields":[{"Name":"Records","Docs":"","Typewords":["[]","AutodiscoverSRV"]},{"Name":"Errors","Docs":"","Typewords":["[]","string"]},{"Name":"Warnings","Docs":"","Typewords":["[]","string"]},{"Name":"Instructions","Docs":"","Typewords":["[]","string"]}]},
 	"AutodiscoverSRV": {"Name":"AutodiscoverSRV","Docs":"","Fields":[{"Name":"Target","Docs":"","Typewords":["string"]},{"Name":"Port","Docs":"","Typewords":["uint16"]},{"Name":"Priority","Docs":"","Typewords":["uint16"]},{"Name":"Weight","Docs":"","Typewords":["uint16"]},{"Name":"IPs","Docs":"","Typewords":["[]","string"]}]},
-	"ConfigDomain": {"Name":"ConfigDomain","Docs":"","Fields":[{"Name":"Disabled","Docs":"","Typewords":["bool"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"ClientSettingsDomain","Docs":"","Typewords":["string"]},{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCatchallSeparators","Docs":"","Typewords":["[]","string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]},{"Name":"DKIM","Docs":"","Typewords":["DKIM"]},{"Name":"DMARC","Docs":"","Typewords":["nullable","DMARC"]},{"Name":"MTASTS","Docs":"","Typewords":["nullable","MTASTS"]},{"Name":"TLSRPT","Docs":"","Typewords":["nullable","TLSRPT"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"Aliases","Docs":"","Typewords":["{}","Alias"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]},{"Name":"LocalpartCatchallSeparatorsEffective","Docs":"","Typewords":["[]","string"]}]},
+	"ConfigDomain": {"Name":"ConfigDomain","Docs":"","Fields":[{"Name":"Disabled","Docs":"","Typewords":["bool"]},{"Name":"SendOnly","Docs":"","Typewords":["bool"]},{"Name":"Description","Docs":"","Typewords":["string"]},{"Name":"ClientSettingsDomain","Docs":"","Typewords":["string"]},{"Name":"LocalpartCatchallSeparator","Docs":"","Typewords":["string"]},{"Name":"LocalpartCatchallSeparators","Docs":"","Typewords":["[]","string"]},{"Name":"LocalpartCaseSensitive","Docs":"","Typewords":["bool"]},{"Name":"DKIM","Docs":"","Typewords":["DKIM"]},{"Name":"DMARC","Docs":"","Typewords":["nullable","DMARC"]},{"Name":"MTASTS","Docs":"","Typewords":["nullable","MTASTS"]},{"Name":"TLSRPT","Docs":"","Typewords":["nullable","TLSRPT"]},{"Name":"Routes","Docs":"","Typewords":["[]","Route"]},{"Name":"Aliases","Docs":"","Typewords":["{}","Alias"]},{"Name":"Domain","Docs":"","Typewords":["Domain"]},{"Name":"LocalpartCatchallSeparatorsEffective","Docs":"","Typewords":["[]","string"]}]},
 	"DKIM": {"Name":"DKIM","Docs":"","Fields":[{"Name":"Selectors","Docs":"","Typewords":["{}","Selector"]},{"Name":"Sign","Docs":"","Typewords":["[]","string"]}]},
 	"Selector": {"Name":"Selector","Docs":"","Fields":[{"Name":"Hash","Docs":"","Typewords":["string"]},{"Name":"HashEffective","Docs":"","Typewords":["string"]},{"Name":"Canonicalization","Docs":"","Typewords":["Canonicalization"]},{"Name":"Headers","Docs":"","Typewords":["[]","string"]},{"Name":"HeadersEffective","Docs":"","Typewords":["[]","string"]},{"Name":"DontSealHeaders","Docs":"","Typewords":["bool"]},{"Name":"Expiration","Docs":"","Typewords":["string"]},{"Name":"PrivateKeyFile","Docs":"","Typewords":["string"]},{"Name":"Algorithm","Docs":"","Typewords":["string"]}]},
 	"Canonicalization": {"Name":"Canonicalization","Docs":"","Fields":[{"Name":"HeaderRelaxed","Docs":"","Typewords":["bool"]},{"Name":"BodyRelaxed","Docs":"","Typewords":["bool"]}]},
@@ -2294,6 +2295,16 @@ export class Client {
 		const paramTypes: string[][] = [["string"],["bool"]]
 		const returnTypes: string[][] = []
 		const params: any[] = [domainName, disabled]
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
+	}
+
+	// DomainSendOnlySave saves the SendOnly setting for a domain. A send-only domain
+	// does not receive email on this host.
+	async DomainSendOnlySave(domainName: string, sendOnly: boolean): Promise<void> {
+		const fn: string = "DomainSendOnlySave"
+		const paramTypes: string[][] = [["string"],["bool"]]
+		const returnTypes: string[][] = []
+		const params: any[] = [domainName, sendOnly]
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as void
 	}
 

@@ -2016,6 +2016,17 @@ func (c *conn) cmdRcpt(p *parser) {
 			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "not accepting email for ip")
 		}
 		c.recipients = append(c.recipients, recipient{fpath, nil, nil})
+	} else if dc, ok := mox.Conf.Domain(fpath.IPDomain.Domain); ok && dc.SendOnly && !dc.Disabled && !Localserve {
+		// Send-only domains don't receive email here, their addresses are all remote.
+		// This is not handled in LookupAddress because addresses at send-only domains are
+		// still used for authorizing message From addresses and logins. Disabled domains
+		// are handled by LookupAddress, with a temporary error.
+		if !c.submission {
+			c.log.Info("smtp recipient for send-only domain", slog.Any("domain", fpath.IPDomain.Domain))
+			xsmtpUserErrorf(smtp.C550MailboxUnavail, smtp.SeAddr1UnknownDestMailbox1, "not accepting email for domain")
+		}
+		// We'll be delivering this email.
+		c.recipients = append(c.recipients, recipient{fpath, nil, nil})
 	} else if accountName, alias, canonical, dest, err := mox.LookupAddress(fpath.Localpart, fpath.IPDomain.Domain, true, true, true); err == nil {
 		// note: a bare postmaster, without domain, is handled by LookupAddress. ../rfc/5321:735
 		if alias != nil {

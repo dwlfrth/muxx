@@ -127,11 +127,22 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 		)
 	}
 
-	records = append(records,
-		"; Deliver email for the domain to this host.",
-		fmt.Sprintf("%s.                    MX 10 %s.", d, h),
-		"",
+	if domConf.SendOnly {
+		records = append(records,
+			"; This domain is configured as send-only: this host does not receive email for the",
+			"; domain. No MX, MTA-STS, TLSRPT and autoconfig records are needed for this host.",
+			"; The MX records of the domain, if any, must point to other mail servers.",
+			"",
+		)
+	} else {
+		records = append(records,
+			"; Deliver email for the domain to this host.",
+			fmt.Sprintf("%s.                    MX 10 %s.", d, h),
+			"",
+		)
+	}
 
+	records = append(records,
 		"; Outgoing messages will be signed with the first two DKIM keys. The other two",
 		"; configured for backup, switching to them is just a config change.",
 	)
@@ -187,10 +198,15 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 		}
 		dspfr.Directives = append(dspfr.Directives, spf.Directive{Mechanism: mech, IP: ip})
 	}
-	dspfr.Directives = append(dspfr.Directives,
-		spf.Directive{Mechanism: "mx"},
-		spf.Directive{Qualifier: "~", Mechanism: "all"},
-	)
+	spfComment := "; Specify the MX host is allowed to send for our domain and for itself (for DSNs)."
+	if domConf.SendOnly {
+		// The MX hosts of a send-only domain are other mail servers, they are not
+		// necessarily allowed to send for the domain.
+		spfComment = "; Specify this host is allowed to send for our domain. Add the hosts of other mail servers or (route) transports that send for the domain."
+	} else {
+		dspfr.Directives = append(dspfr.Directives, spf.Directive{Mechanism: "mx"})
+	}
+	dspfr.Directives = append(dspfr.Directives, spf.Directive{Qualifier: "~", Mechanism: "all"})
 	dspftxt, err := dspfr.Record()
 	if err != nil {
 		return nil, fmt.Errorf("making domain spf record: %v", err)
@@ -198,7 +214,7 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 	records = append(records,
 		"",
 
-		"; Specify the MX host is allowed to send for our domain and for itself (for DSNs).",
+		spfComment,
 		"; ~all means softfail for anything else, which is done instead of -all to prevent older",
 		"; mail servers from rejecting the message because they never get to looking for a dkim/dmarc pass.",
 		fmt.Sprintf(`%s.                    TXT "%s"`, d, dspftxt),
@@ -221,7 +237,7 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 			fmt.Sprintf(`_mta-sts.%s.           TXT "v=STSv1; id=%s"`, d, sts.PolicyID),
 			"",
 		)
-	} else {
+	} else if !domConf.SendOnly {
 		records = append(records,
 			"; Note: No MTA-STS to indicate TLS should be used. Either because disabled for the",
 			"; domain or because mox.conf does not have a listener with MTA-STS configured.",
@@ -252,31 +268,35 @@ func DomainRecords(domConf config.Domain, domain dns.Domain, hasDNSSEC bool, cer
 		)
 	}
 
-	records = append(records,
-		"; Autoconfig is used by Thunderbird. Autodiscover is (in theory) used by Microsoft.",
-		fmt.Sprintf(`autoconfig.%s.         CNAME %s.`, d, h),
-		fmt.Sprintf(`_autodiscover._tcp.%s. SRV 0 1 443 %s.`, d, h),
-		"",
+	// Send-only domains have no autoconfig records: autoconfig and SRV records are
+	// looked up for an email address, typically for receiving email at the address.
+	if !domConf.SendOnly {
+		records = append(records,
+			"; Autoconfig is used by Thunderbird. Autodiscover is (in theory) used by Microsoft.",
+			fmt.Sprintf(`autoconfig.%s.         CNAME %s.`, d, h),
+			fmt.Sprintf(`_autodiscover._tcp.%s. SRV 0 1 443 %s.`, d, h),
+			"",
 
-		// ../rfc/6186:133 ../rfc/8314:692
-		// ../rfc/2782:202 says we MUST NOT have a CNAME as the target to a SRV record, but
-		// arnt says it's safe to ignore that statement, see
-		// https://github.com/mjl-/mox/pull/367#issuecomment-3486518824. Software isn't
-		// likely to actually update their configs to the targets of CNAMEs, and the
-		// additional lookups won't cause relevant delays or traffic.
-		"; For secure IMAP and submission autoconfig, point to mail host.",
-		fmt.Sprintf(`_imaps._tcp.%s.        SRV 0 1 993 %s.`, d, csd),
-		fmt.Sprintf(`_submissions._tcp.%s.  SRV 0 1 465 %s.`, d, csd),
-		"",
-		// ../rfc/6186:242
-		"; Next records specify POP3 and non-TLS ports are not to be used.",
-		"; These are optional and safe to leave out (e.g. if you have to click a lot in a",
-		"; DNS admin web interface).",
-		fmt.Sprintf(`_imap._tcp.%s.         SRV 0 0 0 .`, d),
-		fmt.Sprintf(`_submission._tcp.%s.   SRV 0 0 0 .`, d),
-		fmt.Sprintf(`_pop3._tcp.%s.         SRV 0 0 0 .`, d),
-		fmt.Sprintf(`_pop3s._tcp.%s.        SRV 0 0 0 .`, d),
-	)
+			// ../rfc/6186:133 ../rfc/8314:692
+			// ../rfc/2782:202 says we MUST NOT have a CNAME as the target to a SRV record, but
+			// arnt says it's safe to ignore that statement, see
+			// https://github.com/mjl-/mox/pull/367#issuecomment-3486518824. Software isn't
+			// likely to actually update their configs to the targets of CNAMEs, and the
+			// additional lookups won't cause relevant delays or traffic.
+			"; For secure IMAP and submission autoconfig, point to mail host.",
+			fmt.Sprintf(`_imaps._tcp.%s.        SRV 0 1 993 %s.`, d, csd),
+			fmt.Sprintf(`_submissions._tcp.%s.  SRV 0 1 465 %s.`, d, csd),
+			"",
+			// ../rfc/6186:242
+			"; Next records specify POP3 and non-TLS ports are not to be used.",
+			"; These are optional and safe to leave out (e.g. if you have to click a lot in a",
+			"; DNS admin web interface).",
+			fmt.Sprintf(`_imap._tcp.%s.         SRV 0 0 0 .`, d),
+			fmt.Sprintf(`_submission._tcp.%s.   SRV 0 0 0 .`, d),
+			fmt.Sprintf(`_pop3._tcp.%s.         SRV 0 0 0 .`, d),
+			fmt.Sprintf(`_pop3s._tcp.%s.        SRV 0 0 0 .`, d),
+		)
+	}
 
 	if certIssuerDomainName != "" {
 		// ../rfc/8659:18 for CAA records.

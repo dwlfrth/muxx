@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +24,7 @@ import (
 
 	"github.com/mjl-/sherpa"
 
+	"github.com/mjl-/mox/admin"
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
@@ -445,4 +448,200 @@ func TestCheckDomain(t *testing.T) {
 
 	Admin{}.Domains(ctxbg)             // todo: check results
 	dnsblsStatus(ctxbg, log, resolver) // todo: check results
+}
+
+// tneedErrorMsg calls fn and checks it panics with a sherpa error with a message
+// containing substr.
+func tneedErrorMsg(t *testing.T, substr string, fn func()) {
+	t.Helper()
+	defer func() {
+		t.Helper()
+		x := recover()
+		if x == nil {
+			debug.PrintStack()
+			t.Fatalf("expected sherpa error with %q, saw success", substr)
+		}
+		if err, ok := x.(*sherpa.Error); !ok {
+			debug.PrintStack()
+			t.Fatalf("expected sherpa error, saw %#v", x)
+		} else if !strings.Contains(err.Message, substr) {
+			debug.PrintStack()
+			t.Fatalf("expected sherpa error with %q, saw other sherpa error %#v", substr, err)
+		}
+	}()
+
+	fn()
+}
+
+// Test configuring send-only domains, and the DNS records suggested for them.
+func TestDomainSendOnly(t *testing.T) {
+	os.RemoveAll("../testdata/webadmin/data")
+	defer os.RemoveAll("../testdata/webadmin/data")
+	defer os.RemoveAll("../testdata/webadmin/dkim")
+	mox.ConfigStaticPath = filepath.FromSlash("../testdata/webadmin/mox.conf")
+	mox.ConfigDynamicPath = filepath.Join(filepath.Dir(mox.ConfigStaticPath), "domains.conf")
+
+	// Changes are written to domains.conf, restore it afterwards.
+	origDomainsConf, err := os.ReadFile(mox.ConfigDynamicPath)
+	tcheck(t, err, "reading domains.conf")
+	defer func() {
+		err := os.WriteFile(mox.ConfigDynamicPath, origDomainsConf, 0660)
+		tcheck(t, err, "restoring domains.conf")
+	}()
+
+	mox.MustLoadConfig(true, false)
+
+	api := Admin{}
+
+	// The domain of the mail server hostname must receive email, e.g. for postmaster.
+	tneedErrorMsg(t, "send-only domain cannot be the hostname of this mail server", func() { api.DomainSendOnlySave(ctxbg, "mox.example", true) })
+
+	// New domains get DMARC and TLSRPT reporting addresses at the domain itself,
+	// which isn't possible for send-only domains.
+	api.DomainAdd(ctxbg, false, "sendonly.example", "mjl", "")
+	tneedErrorMsg(t, "send-only domain cannot have TLSRPT", func() { api.DomainSendOnlySave(ctxbg, "sendonly.example", true) })
+	api.DomainTLSRPTAddressSave(ctxbg, "sendonly.example", "", "", "", "")
+	tneedErrorMsg(t, "DMARC reporting address cannot be at send-only domain", func() { api.DomainSendOnlySave(ctxbg, "sendonly.example", true) })
+
+	// With DMARC reports going to another domain, the domain can be send-only.
+	api.DomainDMARCAddressSave(ctxbg, "sendonly.example", "dmarcreports", "mox.example", "mjl", "DMARC")
+	api.DomainSendOnlySave(ctxbg, "sendonly.example", true)
+	tcompare(t, api.DomainConfig(ctxbg, "sendonly.example").SendOnly, true)
+
+	// Settings for incoming email are not possible for send-only domains.
+	tneedErrorMsg(t, "send-only domain cannot have TLSRPT", func() {
+		api.DomainTLSRPTAddressSave(ctxbg, "sendonly.example", "tlsreports", "mox.example", "mjl", "TLSRPT")
+	})
+	tneedErrorMsg(t, "send-only domain cannot have MTA-STS", func() {
+		api.DomainMTASTSSave(ctxbg, "sendonly.example", "id0", mtasts.ModeEnforce, time.Hour, []string{"mail.mox.example"})
+	})
+	tneedErrorMsg(t, "send-only domain cannot have aliases", func() {
+		api.AliasAdd(ctxbg, "team", "sendonly.example", config.Alias{Addresses: []string{"mjl@mox.example"}})
+	})
+	tneedErrorMsg(t, "send-only domain cannot have catchall address", func() { api.AddressAdd(ctxbg, "@sendonly.example", "mjl") })
+	tneedErrorMsg(t, "DMARC reporting address cannot be at send-only domain", func() {
+		api.DomainDMARCAddressSave(ctxbg, "mox.example", "dmarcreports", "sendonly.example", "mjl", "DMARC")
+	})
+	tneedErrorMsg(t, "TLSRPT reporting address cannot be at send-only domain", func() {
+		api.DomainTLSRPTAddressSave(ctxbg, "mox.example", "tlsreports", "sendonly.example", "mjl", "TLSRPT")
+	})
+	// Regular addresses are fine, for use as message From address.
+	api.AddressAdd(ctxbg, "mjl@sendonly.example", "mjl")
+
+	// The host name of an SMTP listener must receive email too, like the host name
+	// of the mail server.
+	origListeners := mox.Conf.Static.Listeners
+	listeners := maps.Clone(origListeners)
+	l := listeners["local"]
+	l.SMTP.Enabled = true
+	l.HostnameDomain = dns.Domain{ASCII: "sendonly.example"}
+	listeners["local"] = l
+	func() {
+		mox.Conf.Static.Listeners = listeners
+		defer func() { mox.Conf.Static.Listeners = origListeners }()
+		tneedErrorMsg(t, "send-only domain cannot be the hostname of an smtp listener", func() { api.DomainSendOnlySave(ctxbg, "sendonly.example", true) })
+	}()
+
+	// DNS records for a send-only domain have no records for incoming email.
+	hasRecord := func(records []string, substr string) bool {
+		return slices.ContainsFunc(records, func(s string) bool {
+			return !strings.HasPrefix(s, ";") && strings.Contains(s, substr)
+		})
+	}
+	domConf := api.DomainConfig(ctxbg, "sendonly.example")
+	records, err := admin.DomainRecords(domConf, domConf.Domain, false, "", "")
+	tcheck(t, err, "dns records")
+	for _, s := range []string{" MX ", "autoconfig.", "_autodiscover.", "_imaps._tcp.", "_mta-sts.", "_smtp._tls.sendonly.example."} {
+		if hasRecord(records, s) {
+			t.Fatalf("dns records for send-only domain have %q:\n%s", s, strings.Join(records, "\n"))
+		}
+	}
+	for _, s := range []string{"._domainkey.sendonly.example.", `_dmarc.sendonly.example.`, "mailto:dmarcreports@mox.example", `sendonly.example.                    TXT "v=spf1 `} {
+		if !hasRecord(records, s) {
+			t.Fatalf("dns records for send-only domain missing %q:\n%s", s, strings.Join(records, "\n"))
+		}
+	}
+	if hasRecord(records, "v=spf1") && hasRecord(records, " mx ") {
+		t.Fatalf("spf record for send-only domain allows mx hosts:\n%s", strings.Join(records, "\n"))
+	}
+
+	// Same checks against the same domain that isn't send-only, to verify the checks
+	// above can find records.
+	domConf.SendOnly = false
+	records, err = admin.DomainRecords(domConf, domConf.Domain, false, "", "")
+	tcheck(t, err, "dns records")
+	for _, s := range []string{" MX ", "autoconfig.", "_autodiscover.", "_imaps._tcp.", " mx "} {
+		if !hasRecord(records, s) {
+			t.Fatalf("dns records for regular domain missing %q:\n%s", s, strings.Join(records, "\n"))
+		}
+	}
+
+	// Domain can be made to receive email again.
+	api.DomainSendOnlySave(ctxbg, "sendonly.example", false)
+	tcompare(t, api.DomainConfig(ctxbg, "sendonly.example").SendOnly, false)
+}
+
+// Test the DNS checks for send-only domains skip checks for incoming email.
+func TestCheckDomainSendOnly(t *testing.T) {
+	resolver := dns.MockResolver{
+		MX: map[string][]*net.MX{
+			// MX pointing to this host is an error for send-only domains.
+			"sendonly.example.": {{Host: "mail.mox.example.", Pref: 10}},
+		},
+		A: map[string][]string{
+			"mail.mox.example.": {"127.0.0.2"},
+			"mox.example.":      {"127.0.0.2"},
+		},
+		TXT: map[string][]string{
+			"mox.example.":             {"v=spf1 a -all"},
+			"sendonly.example.":        {"v=spf1 ip4:127.0.0.2 -all"},
+			"_dmarc.sendonly.example.": {"v=DMARC1; p=reject"},
+		},
+	}
+
+	listener := config.Listener{
+		IPs:            []string{"127.0.0.2"},
+		Hostname:       "mox.example",
+		HostnameDomain: dns.Domain{ASCII: "mox.example"},
+	}
+	listener.SMTP.Enabled = true
+	listener.AutoconfigHTTPS.Enabled = true
+	listener.MTASTSHTTPS.Enabled = true
+
+	// Set explicitly, this test does not depend on other tests having loaded a config.
+	mox.Conf.Static.HostnameDomain = dns.Domain{ASCII: "mox.example"}
+	mox.Conf.Static.Listeners = map[string]config.Listener{
+		"public": listener,
+	}
+	mox.Conf.Dynamic.Domains = map[string]config.Domain{
+		"sendonly.example": {SendOnly: true, Domain: dns.Domain{ASCII: "sendonly.example"}},
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	r := checkDomain(ctx, resolver, &net.Dialer{}, "sendonly.example")
+
+	for name, res := range map[string]Result{
+		"TLS":          r.TLS.Result,
+		"DANE":         r.DANE.Result,
+		"DomainTLSRPT": r.DomainTLSRPT.Result,
+		"MTASTS":       r.MTASTS.Result,
+		"SRVConf":      r.SRVConf.Result,
+		"Autoconf":     r.Autoconf.Result,
+		"Autodiscover": r.Autodiscover.Result,
+	} {
+		if len(res.Errors) != 0 || len(res.Warnings) != 0 || !slices.Equal(res.Instructions, []string{sendOnlyNotApplicable}) {
+			t.Fatalf("check %s for send-only domain: got %#v, expected only not-applicable instruction", name, res)
+		}
+	}
+
+	if len(r.MX.Errors) != 1 || !strings.Contains(r.MX.Errors[0], "Domain is send-only, but mx") {
+		t.Fatalf("mx check for send-only domain with mx pointing to this host: got errors %#v", r.MX.Errors)
+	}
+	if len(r.MX.Instructions) != 1 || strings.Contains(r.MX.Instructions[0], " MX 10 ") {
+		t.Fatalf("mx instructions for send-only domain: got %#v", r.MX.Instructions)
+	}
+	if len(r.SPF.Errors) != 0 || len(r.SPF.Instructions) == 0 || strings.Contains(r.SPF.Instructions[0], " mx ") {
+		t.Fatalf("spf check for send-only domain: got %#v", r.SPF.Result)
+	}
 }

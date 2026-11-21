@@ -343,7 +343,8 @@ func (c *Config) allowACMEHosts(log mlog.Log, checkACMEHosts bool) {
 				continue
 			}
 
-			if l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS {
+			// Send-only domains don't have autoconfig DNS records.
+			if l.AutoconfigHTTPS.Enabled && !l.AutoconfigHTTPS.NonTLS && !dom.SendOnly {
 				if d, err := dns.ParseDomain("autoconfig." + dom.Domain.ASCII); err != nil {
 					log.Errorx("parsing autoconfig domain", err, slog.Any("domain", dom.Domain))
 				} else {
@@ -1309,6 +1310,30 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			sepSeen[sep] = true
 		}
 
+		// Send-only domains don't receive email, so settings for incoming email are not
+		// possible. Catchall destinations and reporting addresses are checked below.
+		if domain.SendOnly {
+			// Postmaster and host TLS reporting addresses at the host names of this mail
+			// server must keep receiving email.
+			if dnsdomain == static.HostnameDomain {
+				addDomainErrorf("send-only domain cannot be the hostname of this mail server")
+			}
+			for _, l := range static.Listeners {
+				if l.SMTP.Enabled && dnsdomain == l.HostnameDomain {
+					addDomainErrorf("send-only domain cannot be the hostname of an smtp listener")
+				}
+			}
+			if domain.MTASTS != nil {
+				addDomainErrorf("send-only domain cannot have MTA-STS")
+			}
+			if domain.TLSRPT != nil {
+				addDomainErrorf("send-only domain cannot have TLSRPT")
+			}
+			if len(domain.Aliases) > 0 {
+				addDomainErrorf("send-only domain cannot have aliases")
+			}
+		}
+
 		for _, sign := range domain.DKIM.Sign {
 			if _, ok := domain.DKIM.Selectors[sign]; !ok {
 				addDomainErrorf("unknown selector %s for signing", sign)
@@ -1701,8 +1726,11 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 				if err != nil {
 					addDestErrorf("parsing domain %q", addrName[1:])
 					continue
-				} else if _, ok := c.Domains[d.Name()]; !ok {
+				} else if dc, ok := c.Domains[d.Name()]; !ok {
 					addDestErrorf("unknown domain for address")
+					continue
+				} else if dc.SendOnly {
+					addDestErrorf("send-only domain cannot have catchall address")
 					continue
 				}
 				domainHasAddress[d.Name()] = true
@@ -1826,6 +1854,9 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 		} else if !domain.LocalpartCaseSensitive {
 			lp = smtp.Localpart(strings.ToLower(string(lp)))
 		}
+		if c.Domains[addrdom.Name()].SendOnly {
+			addDomainErrorf("DMARC reporting address cannot be at send-only domain %s, set the DMARC domain to a domain that receives email", addrdom)
+		}
 		if addrdom == domain.Domain {
 			domainHasAddress[addrdom.Name()] = true
 		}
@@ -1878,6 +1909,10 @@ func prepareDynamicConfig(ctx context.Context, log mlog.Log, dynamicPath string,
 			}
 		} else if !domain.LocalpartCaseSensitive {
 			lp = smtp.Localpart(strings.ToLower(string(lp)))
+		}
+		if !domain.SendOnly && c.Domains[addrdom.Name()].SendOnly {
+			// TLSRPT for a send-only domain itself is already rejected above.
+			addDomainErrorf("TLSRPT reporting address cannot be at send-only domain %s", addrdom)
 		}
 		if addrdom == domain.Domain {
 			domainHasAddress[addrdom.Name()] = true
