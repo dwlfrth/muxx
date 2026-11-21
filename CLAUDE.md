@@ -56,9 +56,12 @@ note as message, and publish only the tag (to both remotes):
 tag=muxx-$(date -u +%Y%m%d%H%M) && git tag -a "$tag" && git push origin "$tag"
 ```
 `push.followTags` does not help here: `main` itself is never pushed by hand.
-Push the tag only once GitHub's `main` has the merge commit, which arrives
-through the mirror: `git ls-remote git@github.com:dwlfrth/muxx.git main` must
-show it. The image workflow refuses a tag whose commit is not on `main`.
+Push the tag only once `main`'s GitLab pipeline for the merge commit has
+passed: `gates`, `race` and SAST run only there (see "Gates"), and the tag
+gets no pipeline of its own. And only once GitHub's `main` has the merge
+commit, which arrives through the mirror: `git ls-remote
+git@github.com:dwlfrth/muxx.git main` must show it. The image workflow refuses
+a tag whose commit is not on `main`.
 
 `.github/workflows/muxx-image.yml` builds the image on GitHub: on a release tag
 it checks that the tag is annotated, named `muxx-YYYYMMDDHHMM` and on a commit
@@ -133,8 +136,16 @@ the checklist when moving the project, e.g. to a self-hosted GitLab.
 CI runs the same steps as upstream's `.github/workflows/build-test.yml`, on Go
 stable and oldstable with Node 24: `make build` (after `touch */*.ts`, so the
 frontend is rebuilt), `TMPDIR=$PWD/tmp make test`, `make fmt` and `git diff
---exit-code`. GitLab runs them in the `gates` job of `.gitlab-ci.yml`, and
-GitHub Actions runs upstream's workflow on every push to GitHub.
+--exit-code`. GitHub Actions runs upstream's workflow, for free, on every push
+to GitHub, branches included; GitLab runs the same steps in its `gates` job,
+on `main` only.
+
+To save GitLab compute minutes, which are counted per job: branches run only
+`checks` and secret detection, and look at GitHub Actions for build and tests
+before merging; `main` also runs `gates`, `race` and SAST after the merge. A
+problem only those find shows up after the merge, so it is fixed forward before
+any release. Release tags get no GitLab pipeline: their commit was tested on
+`main`, and GitHub builds the image.
 
 GitLab's `checks` job adds, blocking, on Go 1.27: `go vet` (also for
 linux/386), `ineffassign` v0.1.0, `staticcheck` v0.8.2 without SA1019 (see "Do
@@ -144,15 +155,20 @@ workflow). Those versions are pinned there and bumped by hand; run them
 locally at the same versions with `go run ...@<pin>`.
 Pipelines take their definition from `main` (see "Settings outside git"). A
 branch that changes `.gitlab-ci.yml` is tested with its own version instead:
-the `ci-changes` job runs it as a child pipeline and the other jobs skip
-themselves, so they run once. That job is itself only active once merged, so
-the first change after it shows whether it works.
+the `ci-changes` job runs it as a child pipeline and `checks` skips itself, so
+it runs once (secret detection runs in both; `gates`, `race` and SAST do not
+run on branches at all). That job is itself only active once merged, so
+the first change after it showed whether it works: it did, on the change that
+limited branches to `checks` (2026-11-20), whose child pipeline ran only
+`checks` and secret detection while the parent, still on `main`'s file, ran
+SAST.
 
 GitLab's `race` job runs `make test-race`, the whole suite under the race
-detector, on Go 1.27; locally, `go test -race` on the touched packages is
-enough before pushing. Do not run other gates while a test run with
-`TMPDIR=$PWD/tmp` is going: `./...` then includes its temporary package copies
-in `tmp/` and fails with errors that are not real.
+detector, on Go 1.27, on `main` only; locally, `go test -race` on the touched
+packages before pushing is what catches a race before the merge. Do not run
+other gates while a test run with `TMPDIR=$PWD/tmp` is going: `./...` then
+includes its temporary package copies in `tmp/` and fails with errors that are
+not real.
 
 ## Do not "fix"
 
