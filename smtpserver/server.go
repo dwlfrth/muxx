@@ -2255,7 +2255,11 @@ func (c *conn) cmdData(p *parser) {
 		}
 	}
 	recvBy := mox.Conf.Static.HostnameDomain.XName(c.msgsmtputf8)
-	recvBy += " (" + smtp.AddressLiteral(c.localIP) + ")" // todo: hide ip if internal?
+	// IsPrivate is true for RFC 1918 IPv4 addresses (also IPv4-mapped) and RFC 4193
+	// IPv6 unique local addresses, not for loopback or link-local.
+	if !c.localIP.IsPrivate() || !mox.Conf.Static.HidePrivateReceivedIP {
+		recvBy += " (" + smtp.AddressLiteral(c.localIP) + ")"
+	}
 	if c.msgsmtputf8 && mox.Conf.Static.HostnameDomain.Unicode != "" {
 		// This syntax is part of "VIA".
 		recvBy += " (" + mox.Conf.Static.HostnameDomain.ASCII + ")"
