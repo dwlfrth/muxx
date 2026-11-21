@@ -116,8 +116,14 @@ the checklist when moving the project, e.g. to a self-hosted GitLab.
   (this repo only, Contents and Workflows read/write); the mirror stops when
   it expires. Tags are mirrored too, so a release tag pushed to GitLab can
   reach GitHub before the second push URL does. The mirror never deletes
-  branches on GitHub: delete a merged feature branch there by hand,
-  `git push git@github.com:dwlfrth/muxx.git --delete <branch>`.
+  branches on GitHub, and nothing there needs them once merged, not even a later
+  pull request to mjl-/mox. So the clean-up on "merged and
+  green" also deletes the merged branch on GitHub, with
+  `git push git@github.com:dwlfrth/muxx.git --delete <branch>`: only after the
+  ancestry check passes, and only if GitHub's copy, read with `git ls-remote`,
+  points at a commit in `origin/main`. A branch GitHub lacks, or one pushed to
+  since the merge, is reported, not deleted. This overrides the global rule
+  that the clean-up deletes the local branch only.
 - GitHub: default branch `main`. Never merge on GitHub; its `main` comes only
   from the mirror.
 - GitHub package `ghcr.io/dwlfrth/muxx`: created by the first release, linked
