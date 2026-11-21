@@ -776,6 +776,14 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 	# (optional)
 	OutgoingTLSReportsForAllSuccess: false
 
+	# Leave out the local IP address of this server from the Received header added to
+	# incoming and submitted messages when it is a private address: an RFC 1918 IPv4
+	# address (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) or an RFC 4193 IPv6 unique
+	# local address (fc00::/7). Useful when running behind NAT or in a container, to
+	# not expose internal network details to recipients. Other addresses are always
+	# included. (optional)
+	HidePrivateReceivedIP: false
+
 	# Default maximum total message size in bytes for each individual account, only
 	# applicable if greater than zero. Can be overridden per account. Attempting to
 	# add new messages to an account beyond its maximum total size will result in an

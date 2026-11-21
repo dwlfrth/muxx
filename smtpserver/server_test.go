@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/big"
 	"mime/quotedprintable"
@@ -110,6 +111,7 @@ type testserver struct {
 	tlsmode      smtpclient.TLSMode
 	tlspkix      bool
 	xops         webops.XOps
+	localIP      net.IP // If set, the server connection reports this as its local TCP address.
 }
 
 const password0 = "te\u0301st \u00a0\u2002\u200a" // NFD and various unicode spaces.
@@ -265,8 +267,13 @@ func (ts *testserver) runRaw(fn func(clientConn net.Conn)) {
 	serverdone := make(chan struct{})
 	defer func() { <-serverdone }()
 
+	conn := serverConn
+	if ts.localIP != nil {
+		conn = localAddrConn{serverConn, &net.TCPAddr{IP: ts.localIP, Port: 25}}
+	}
+
 	go func() {
-		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, ts.serverConfig, serverConn, ts.resolver, ts.submission, ts.immediateTLS, false, false, 100<<20, false, false, ts.requiretls, ts.dnsbls, 0)
+		serve("test", ts.cid-2, dns.Domain{ASCII: "mox.example"}, ts.serverConfig, conn, ts.resolver, ts.submission, ts.immediateTLS, false, false, 100<<20, false, false, ts.requiretls, ts.dnsbls, 0)
 		close(serverdone)
 	}()
 
@@ -275,6 +282,17 @@ func (ts *testserver) runRaw(fn func(clientConn net.Conn)) {
 	}
 
 	fn(clientConn)
+}
+
+// localAddrConn overrides LocalAddr of a net.Pipe conn, to simulate a TCP
+// connection to a specific server IP.
+type localAddrConn struct {
+	net.Conn
+	addr net.Addr
+}
+
+func (c localAddrConn) LocalAddr() net.Addr {
+	return c.addr
 }
 
 func (ts *testserver) smtpErr(err error, expErr *smtpclient.Error) *smtpclient.Error {
@@ -760,6 +778,87 @@ func TestDelivery(t *testing.T) {
 	})
 
 	checkEvaluationCount(t, 0)
+}
+
+// Test that the local IP of the server is left out of the Received header when it
+// is a private address (RFC 1918 or RFC 4193) and HidePrivateReceivedIP is set.
+func TestReceivedPrivateIP(t *testing.T) {
+	resolver := dns.MockResolver{
+		A: map[string][]string{
+			"example.org.": {"127.0.0.10"}, // For mx check.
+		},
+		PTR: map[string][]string{
+			"127.0.0.10": {"example.org."},
+		},
+	}
+	ts := newTestServer(t, filepath.FromSlash("../testdata/smtp/mox.conf"), resolver)
+	defer ts.close()
+	defer func() {
+		mox.Conf.Static.HidePrivateReceivedIP = false
+	}()
+
+	// Deliver a message with the server on localIP, and return its Received header.
+	received := func(localIP string, hide bool) string {
+		t.Helper()
+		ts.localIP = net.ParseIP(localIP)
+		mox.Conf.Static.HidePrivateReceivedIP = hide
+
+		ts.run(func(client *smtpclient.Client) {
+			err := client.Deliver(ctxbg, "remote@example.org", "mjl@mox.example", int64(len(deliverMessage)), strings.NewReader(deliverMessage), false, false, false)
+			tcheck(t, err, "deliver")
+		})
+
+		q := bstore.QueryDB[store.Message](ctxbg, ts.acc.DB)
+		q.SortDesc("ID")
+		q.Limit(1)
+		m, err := q.Get()
+		tcheck(t, err, "get delivered message")
+		buf, err := io.ReadAll(ts.acc.MessageReader(m))
+		tcheck(t, err, "read message")
+		// Unfold header lines.
+		unfolded := strings.NewReplacer("\r\n\t", " ", "\r\n ", " ").Replace(string(buf))
+		for _, line := range strings.Split(unfolded, "\r\n") {
+			if strings.HasPrefix(line, "Received: ") {
+				return line
+			}
+		}
+		t.Fatalf("no received header in message %q", buf)
+		return ""
+	}
+
+	tests := []struct {
+		localIP string
+		hide    bool
+		expect  bool // Whether the local IP should be in the Received header.
+	}{
+		{"10.1.2.3", true, false},
+		{"172.16.1.2", true, false},
+		{"172.31.255.254", true, false},
+		{"192.168.1.2", true, false},
+		{"::ffff:192.168.1.2", true, false},
+		{"10.1.2.3", false, true}, // Default: included.
+		{"192.168.1.2", false, true},
+		{"172.32.1.2", true, true}, // Just outside 172.16.0.0/12.
+		{"198.51.100.1", true, true},
+		{"127.0.0.1", true, true},
+		{"fd12:3456:789a:1::1", true, false}, // Unique local, RFC 4193.
+		{"fc00::1", true, false},             // Start of fc00::/7.
+		{"fdff:ffff:ffff:ffff::1", true, false},
+		{"fd00::1", false, true},
+		{"fe00::1", true, true}, // Just outside fc00::/7.
+		{"fe80::1", true, true}, // Link-local, not private.
+		{"::1", true, true},
+		{"2001:db8::1", true, true},
+	}
+	for _, tc := range tests {
+		hdr := received(tc.localIP, tc.hide)
+		lit := smtp.AddressLiteral(net.ParseIP(tc.localIP))
+		with := "by mox.example (" + lit + ") "
+		without := "by mox.example via "
+		if tc.expect && !strings.Contains(hdr, with) || !tc.expect && !strings.Contains(hdr, without) {
+			t.Errorf("local ip %s, hide %v, expect ip %v: unexpected received header %q", tc.localIP, tc.hide, tc.expect, hdr)
+		}
+	}
 }
 
 func TestIntrobox(t *testing.T) {
