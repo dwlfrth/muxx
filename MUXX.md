@@ -43,7 +43,8 @@ be checked against mox's own releases and security announcements.
 
 Releases are annotated git tags `muxx-YYYYMMDDHHMM`, in UTC, e.g.
 `muxx-202611191730`. The tag message is the release note: the mox version the
-release is based on, and the muxx features it contains.
+release is based on, and the muxx features it contains. Each release also
+has a page on the Releases of GitHub and GitLab, made from that note.
 
 A release build shows its release and the mox version it is based on, e.g.
 `muxx 202611191730 (mox v0.0.18-0.20261119…-ac22e02)`. The update check and
@@ -76,8 +77,8 @@ in `/muxx/data`.
 
 It is built from `Dockerfile.muxx`, a copy of mox's `Dockerfile`, when a
 release tag is pushed. Its standard OCI labels and annotations name the
-release, the commit, the license and the Alpine base image it was built on, by
-digest. To build it yourself, from a commit with a muxx tag:
+release, the commit and the license; its build provenance attestation records
+the base image by digest. To build it yourself, from a commit with a muxx tag:
 
     tag=$(git describe --tags --exact-match --match 'muxx-*') &&
       docker build -f Dockerfile.muxx --build-arg DISTRIBUTION=$tag -t muxx:${tag#muxx-} .

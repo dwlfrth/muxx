@@ -1,21 +1,22 @@
 # The muxx image, see MUXX.md. On an annotated release tag muxx-YYYYMMDDHHMM on
-# a commit of main: built from Dockerfile.muxx for linux/amd64, and pushed as
-# ghcr.io/dwlfrth/muxx:YYYYMMDDHHMM, never as "latest". On main, when the image
-# files change: built only, as release "dev", so the build is tested
-# before a release depends on it.
+# a commit of main: built from Dockerfile.muxx for linux/amd64, pushed as
+# ghcr.io/dwlfrth/muxx:YYYYMMDDHHMM, never as "latest", and given its page on
+# GitHub's Releases. On any branch, when the image files change: built only,
+# as release "dev", so a change is tested before it is merged.
 name: muxx image
 
 on:
   push:
     tags: ['muxx-*']
-    branches: [main]
+    branches: ['**']
     paths: ['Dockerfile.muxx', 'Dockerfile.muxx.dockerignore', '.github/workflows/muxx-image.yml']
 
 jobs:
   image:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # write: the GitHub release of a pushed image.
+      contents: write
       packages: write
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,47 +55,34 @@ jobs:
 
     - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-    # The image's metadata, as labels (docker inspect) and as annotations on the
-    # image and on its index, where GitHub reads the description: the index
-    # holds the image and its build provenance attestation. The base is
-    # alpine:latest resolved to its digest once, and both builds use that
-    # digest, so base.digest names the base the image was built on.
+    # The image's OCI labels, and the same as annotations on the image and on its
+    # index, where GitHub reads the package description. Generated from the
+    # repository and the tag; the overrides are muxx's own values. labels and
+    # annotations are separate inputs, so the overrides are listed twice.
     - name: Metadata
       id: meta
+      uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
       env:
-        BASE_NAME: docker.io/library/alpine:latest
-        TITLE: ${{ steps.release.outputs.distribution }}
-        DESCRIPTION: ${{ steps.release.outputs.description }}
-        VERSION: ${{ steps.release.outputs.release || 'dev' }}
-        # The release tag, or the commit for a build that is not a release.
-        DOCREF: ${{ steps.release.outputs.release && steps.release.outputs.distribution || github.sha }}
-      run: |
-        digest=$(docker buildx imagetools inspect "$BASE_NAME" --format '{{json .Manifest}}' | jq -r .digest)
-        echo "$digest" | grep -qE '^sha256:[0-9a-f]{64}$' || { echo "no digest for $BASE_NAME: $digest" >&2; exit 1; }
-        meta="org.opencontainers.image.title=$TITLE
-        org.opencontainers.image.description=$DESCRIPTION
-        org.opencontainers.image.version=$VERSION
-        org.opencontainers.image.revision=$GITHUB_SHA
-        org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-        org.opencontainers.image.url=https://ananas.sh/projects/muxx
-        org.opencontainers.image.documentation=https://github.com/$GITHUB_REPOSITORY/blob/$DOCREF/MUXX.md
-        org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY
-        org.opencontainers.image.licenses=MIT
-        org.opencontainers.image.authors=muxx@ananas.sh
-        org.opencontainers.image.vendor=ananas.sh
-        org.opencontainers.image.base.name=$BASE_NAME
-        org.opencontainers.image.base.digest=$digest"
-        {
-          echo "base=docker.io/library/alpine@$digest"
-          echo "labels<<EOF"
-          echo "$meta"
-          echo "EOF"
-          echo "annotations<<EOF"
-          echo "index:${meta//$'\n'/$'\n'index:}"
-          echo "manifest:${meta//$'\n'/$'\n'manifest:}"
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
-        echo "$meta"
+        DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+      with:
+        images: ghcr.io/dwlfrth/muxx
+        tags: |
+          type=match,pattern=^muxx-(\d{12})$,group=1
+          type=ref,event=branch
+        labels: |
+          org.opencontainers.image.title=${{ steps.release.outputs.distribution }}
+          org.opencontainers.image.description=${{ steps.release.outputs.description }}
+          org.opencontainers.image.url=https://ananas.sh/projects/muxx
+          org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/${{ steps.release.outputs.release && steps.release.outputs.distribution || github.sha }}/MUXX.md
+          org.opencontainers.image.authors=muxx@ananas.sh
+          org.opencontainers.image.vendor=ananas.sh
+        annotations: |
+          org.opencontainers.image.title=${{ steps.release.outputs.distribution }}
+          org.opencontainers.image.description=${{ steps.release.outputs.description }}
+          org.opencontainers.image.url=https://ananas.sh/projects/muxx
+          org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/${{ steps.release.outputs.release && steps.release.outputs.distribution || github.sha }}/MUXX.md
+          org.opencontainers.image.authors=muxx@ananas.sh
+          org.opencontainers.image.vendor=ananas.sh
 
     - name: Build for linux/amd64 and check the version
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -102,9 +90,7 @@ jobs:
         context: .
         file: Dockerfile.muxx
         platforms: linux/amd64
-        build-args: |
-          DISTRIBUTION=${{ steps.release.outputs.distribution }}
-          BASE=${{ steps.meta.outputs.base }}
+        build-args: DISTRIBUTION=${{ steps.release.outputs.distribution }}
         load: true
         tags: muxx:check
     - env:
@@ -140,10 +126,18 @@ jobs:
         context: .
         file: Dockerfile.muxx
         platforms: linux/amd64
-        build-args: |
-          DISTRIBUTION=${{ steps.release.outputs.distribution }}
-          BASE=${{ steps.meta.outputs.base }}
+        build-args: DISTRIBUTION=${{ steps.release.outputs.distribution }}
         labels: ${{ steps.meta.outputs.labels }}
         annotations: ${{ steps.meta.outputs.annotations }}
         push: ${{ steps.release.outputs.push == 'true' }}
-        tags: ghcr.io/dwlfrth/muxx:${{ steps.release.outputs.release || 'check' }}
+        tags: ${{ steps.meta.outputs.tags }}
+
+    # The release's page on GitHub's Releases, once its image is pushed: the tag
+    # as title and its message as notes. --verify-tag: never creates a tag.
+    - name: GitHub release
+      if: steps.release.outputs.push == 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        TAG: ${{ steps.release.outputs.distribution }}
+      run: gh release create "$TAG" --verify-tag --title "$TAG" --notes-from-tag
