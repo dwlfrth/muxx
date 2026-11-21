@@ -9,14 +9,27 @@ stages:
 - test
 - secret-detection
 
-# Branch pipelines only, as before the rules below: without this, the jobs'
-# catch-all rule would also add a merge request pipeline to every push to an MR
-# branch, running everything twice.
+# Branch pipelines only: without this, the jobs' catch-all rule would also add
+# a merge request pipeline to every push to an MR branch, running everything
+# twice. No tag pipelines: a release tag is on a commit main already tested, and
+# GitHub builds the image. To save compute minutes, branches run only "checks"
+# and secret detection: GitHub Actions runs upstream's build and tests (what
+# "gates" does) for free on every push there. Main also runs gates, race and
+# SAST, after the merge.
 workflow:
   rules:
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     when: never
-  - when: always
+  - if: $CI_COMMIT_TAG
+    when: never
+  - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  - variables:
+      SAST_DISABLED: "true"
+
+# Jobs that only run on main.
+.main-only:
+  rules:
+  - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 sast:
   stage: test
 include:
@@ -29,9 +42,9 @@ secret_detection:
 # file ".gitlab-ci.yml@<group>/muxx:main"), so feature branches from upstream,
 # which have no CI file, get pipelines too. A branch with its own, changed
 # version of this file is tested with that version instead: "ci-changes" runs it
-# as a child pipeline, and the jobs that extend .skip-when-ci-changes skip
-# themselves in the parent, so they run once. Upstream-based branches lack the
-# file, hence "exists".
+# as a child pipeline, and "checks", which extends .skip-when-ci-changes, skips
+# itself in the parent, so it runs once. Upstream-based branches lack the file,
+# hence "exists".
 .skip-when-ci-changes:
   rules:
   - if: $CI_PIPELINE_SOURCE != "parent_pipeline"
@@ -62,9 +75,10 @@ ci-changes:
     strategy: depend
 
 # Same steps as upstream's .github/workflows/build-test.yml, on Go stable and
-# oldstable with Node 24. The Makefile runs npm ci itself when needed.
+# oldstable with Node 24. The Makefile runs npm ci itself when needed. Main
+# only: on branches, GitHub Actions runs upstream's workflow.
 gates:
-  extends: .skip-when-ci-changes
+  extends: .main-only
   stage: test
   image: golang:${GO_VERSION}-trixie
   parallel:
@@ -112,9 +126,10 @@ checks:
     fi
 
 # The whole test suite under the race detector, with upstream's target. Go
-# stable only, to save compute minutes; oldstable is covered by "gates".
+# stable only, to save compute minutes; oldstable is covered by "gates". Main
+# only, also to save compute minutes.
 race:
-  extends: .skip-when-ci-changes
+  extends: .main-only
   stage: test
   image: golang:1.27-trixie
   script:
