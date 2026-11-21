@@ -1,25 +1,24 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/user/application_security/sast/#available-cicd-variables
-# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure/
-# Dependency Scanning customization: https://docs.gitlab.com/user/application_security/dependency_scanning/dependency_scanning_sbom/#customizing-analyzer-behavior
-# Container Scanning customization: https://docs.gitlab.com/user/application_security/container_scanning/#customizing-analyzer-behavior
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ci/variables/#cicd-variable-precedence
 stages:
 - test
 - secret-detection
+- release
 
 # Branch pipelines only: without this, the jobs' catch-all rule would also add
 # a merge request pipeline to every push to an MR branch, running everything
-# twice. No tag pipelines: a release tag is on a commit main already tested, and
-# GitHub builds the image. To save compute minutes, branches run only "checks"
-# and secret detection: GitHub Actions runs upstream's build and tests (what
-# "gates" does) for free on every push there. Main also runs gates, race and
-# SAST, after the merge.
+# twice. A release tag gets a pipeline with only "release": its commit is one
+# main already tested, and GitHub builds the image. Other tags, such as
+# upstream's that travel with a sync branch, get none. To save compute minutes,
+# branches run only "checks" and secret detection: GitHub Actions runs
+# upstream's build and tests for free on every push there, main included, so
+# GitLab does not repeat them. Main also runs race and SAST, after the merge.
 workflow:
   rules:
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     when: never
+  - if: $CI_COMMIT_TAG =~ /^muxx-[0-9]{12}$/
+    variables:
+      SAST_DISABLED: "true"
+      SECRET_DETECTION_DISABLED: "true"
   - if: $CI_COMMIT_TAG
     when: never
   - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -47,6 +46,8 @@ secret_detection:
 # hence "exists".
 .skip-when-ci-changes:
   rules:
+  - if: $CI_COMMIT_TAG
+    when: never
   - if: $CI_PIPELINE_SOURCE != "parent_pipeline"
     exists:
     - .gitlab-ci.yml
@@ -60,6 +61,8 @@ secret_detection:
 ci-changes:
   stage: test
   rules:
+  - if: $CI_COMMIT_TAG
+    when: never
   - if: $CI_PIPELINE_SOURCE != "parent_pipeline" && $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
     exists:
     - .gitlab-ci.yml
@@ -73,31 +76,6 @@ ci-changes:
       ref: $CI_COMMIT_SHA
       file: .gitlab-ci.yml
     strategy: depend
-
-# Same steps as upstream's .github/workflows/build-test.yml, on Go stable and
-# oldstable with Node 24. The Makefile runs npm ci itself when needed. Main
-# only: on branches, GitHub Actions runs upstream's workflow.
-gates:
-  extends: .main-only
-  stage: test
-  image: golang:${GO_VERSION}-trixie
-  parallel:
-    matrix:
-    - GO_VERSION: ["1.27", "1.26"]
-  variables:
-    NODE_VERSION: v24.22.3
-    NODE_SHA256: 4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb
-  before_script:
-  - apt-get update -qq && apt-get install -y -qq xz-utils >/dev/null
-  - curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-linux-x64.tar.xz"
-  - echo "$NODE_SHA256  /tmp/node.tar.xz" | sha256sum -c -
-  - tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
-  script:
-  - touch */*.ts
-  - make build
-  - mkdir -p tmp && TMPDIR=$PWD/tmp make test
-  - make fmt
-  - git diff --exit-code
 
 # Beyond upstream's CI: the checks of upstream's "make check", with pinned
 # versions, the vulnerability scan, and actionlint on muxx's own workflow, all
@@ -126,11 +104,26 @@ checks:
     fi
 
 # The whole test suite under the race detector, with upstream's target. Go
-# stable only, to save compute minutes; oldstable is covered by "gates". Main
-# only, also to save compute minutes.
+# stable only, and on main only, to save compute minutes.
 race:
   extends: .main-only
   stage: test
   image: golang:1.27-trixie
   script:
   - mkdir -p tmp && TMPDIR=$PWD/tmp make test-race
+
+# On a release tag, its page on GitLab's Releases, with GitLab's release
+# keyword: the tag as title and its message as description, as on GitHub. The
+# image is built on GitHub, which this job cannot see. The keyword needs glab in
+# the image and a script; the image is pinned, bump it by hand.
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:v1.130.0
+  rules:
+  - if: $CI_COMMIT_TAG =~ /^muxx-[0-9]{12}$/
+  script:
+  - echo "release $CI_COMMIT_TAG"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: $CI_COMMIT_TAG
+    description: $CI_COMMIT_TAG_MESSAGE

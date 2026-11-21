@@ -57,11 +57,18 @@ tag=muxx-$(date -u +%Y%m%d%H%M) && git tag -a "$tag" && git push origin "$tag"
 ```
 `push.followTags` does not help here: `main` itself is never pushed by hand.
 Push the tag only once `main`'s GitLab pipeline for the merge commit has
-passed: `gates`, `race` and SAST run only there (see "Gates"), and the tag
-gets no pipeline of its own. And only once GitHub's `main` has the merge
+passed: `race` and SAST run only there (see "Gates"), and the tag's
+own pipeline runs only `release`. And only once GitHub's `main` has the merge
 commit, which arrives through the mirror: `git ls-remote
 git@github.com:dwlfrth/muxx.git main` must show it. The image workflow refuses
 a tag whose commit is not on `main`.
+
+CI gives each release a page on GitLab's and GitHub's Releases with each
+platform's own feature: the tag as title, its message as notes (the `release`
+job's `release:` keyword; `gh release create --notes-from-tag` in the image
+workflow, after the image push). The note is Markdown there: put `<…>` in
+backticks. Neither rewrites an existing release; a page that failed is made by
+hand on the tag, as for the two releases tagged before this.
 
 `.github/workflows/muxx-image.yml` builds the image on GitHub: on a release tag
 it checks that the tag is annotated, named `muxx-YYYYMMDDHHMM` and on a commit
@@ -69,7 +76,8 @@ made on `main` itself (a merge commit, not one of a merged branch), and that
 the release was not pushed before (a moved tag must not replace an image),
 builds for linux/amd64, checks the version of the build (release named, no
 local changes), and pushes it to `ghcr.io/dwlfrth/muxx:<release>`, never
-`latest`. On `main`, when the image files change, it only builds. Only
+`latest`. On any branch, when the image files change, it only builds, so a
+change to them is tested before the merge. Only
 linux/amd64 is built, the platform of the servers that run muxx: arm64 was
 built at first, under emulation, and took most of each run's time for a
 platform nothing runs. `Dockerfile.muxx` builds with the Go version CI tests
@@ -79,23 +87,14 @@ actions are pinned by commit, with the version as comment; bump them by hand.
 version stamp: excluding a tracked file there makes every image report local
 changes.
 
-The workflow's `Metadata` step sets the standard OCI fields, chosen by the
-owner: title `muxx-<release>`, description, version `<release>`, revision,
-created, url, documentation (`MUXX.md` at the release tag), source, licenses,
-authors, vendor, and base name and digest. They go on as labels (`docker
-inspect`) and as annotations on both the image and its index: buildx adds a
-build provenance attestation (the `unknown/unknown` entry on GitHub's package
-page, kept by choice), which makes the pushed image an index, and GitHub reads
-the package description only from the index's annotations. Each package
-version is a release, so its description is the first line of the release note
-(the tag message), and a tag without one is refused; a build on `main` is
-described as a development build. Only the first line: the build action takes
-labels and annotations one per line. The base is `alpine:latest` resolved to
-its digest before building, and both builds use that digest
-(`Dockerfile.muxx`'s `BASE` argument), so `base.digest` is the base the image
-was built on; a local build without the argument uses `alpine:latest`. Images
-of releases up to `muxx-202611210226` have none of this: a release's image is
-never pushed again.
+`docker/metadata-action` sets the image's OCI labels, and the same as
+annotations on the image and its index: GitHub reads the package description
+only from the index, which exists because of buildx's provenance attestation
+(the `unknown/unknown` entry, kept: it also records the base image by digest).
+The workflow overrides title, url, documentation, authors, vendor and the
+description: the release note's first line (the build action takes one value
+per line), and a tag without a note is refused. Images up to
+`muxx-202611210226` have no metadata.
 
 A build of muxx from a commit without a release tag sets the variable to
 `muxx-dev`, so it reads `muxx dev (mox <version>)` and cannot be mistaken for
@@ -157,19 +156,22 @@ the checklist when moving the project, e.g. to a self-hosted GitLab.
 
 ## Gates
 
-CI runs the same steps as upstream's `.github/workflows/build-test.yml`, on Go
+Build and tests are upstream's `.github/workflows/build-test.yml`, on Go
 stable and oldstable with Node 24: `make build` (after `touch */*.ts`, so the
 frontend is rebuilt), `TMPDIR=$PWD/tmp make test`, `make fmt` and `git diff
---exit-code`. GitHub Actions runs upstream's workflow, for free, on every push
-to GitHub, branches included; GitLab runs the same steps in its `gates` job,
-on `main` only.
+--exit-code`. GitHub Actions runs it, for free, on every push to GitHub,
+branches and `main` (through the mirror) included: look there before merging.
+GitLab does not repeat it: its `gates` job did, on `main`, until 2026-11-21,
+and was dropped as a duplicate; add it back if GitLab is ever used without
+GitHub.
 
 To save GitLab compute minutes, which are counted per job: branches run only
-`checks` and secret detection, and look at GitHub Actions for build and tests
-before merging; `main` also runs `gates`, `race` and SAST after the merge. A
+`checks` and secret detection; `main` also runs `race` and SAST after the
+merge. A
 problem only those find shows up after the merge, so it is fixed forward before
-any release. Release tags get no GitLab pipeline: their commit was tested on
-`main`, and GitHub builds the image.
+any release. A release tag's pipeline runs only `release`, which creates its
+GitLab release: its commit was tested on `main`, and GitHub builds the image.
+Other tags, e.g. upstream's travelling with a sync branch, get no pipeline.
 
 GitLab's `checks` job adds, blocking, on Go 1.27: `go vet` (also for
 linux/386), `ineffassign` v0.1.0, `staticcheck` v0.8.2 without SA1019 (see "Do
@@ -180,12 +182,9 @@ locally at the same versions with `go run ...@<pin>`.
 Pipelines take their definition from `main` (see "Settings outside git"). A
 branch that changes `.gitlab-ci.yml` is tested with its own version instead:
 the `ci-changes` job runs it as a child pipeline and `checks` skips itself, so
-it runs once (secret detection runs in both; `gates`, `race` and SAST do not
-run on branches at all). That job is itself only active once merged, so
-the first change after it showed whether it works: it did, on the change that
-limited branches to `checks` (2026-11-20), whose child pipeline ran only
-`checks` and secret detection while the parent, still on `main`'s file, ran
-SAST.
+it runs once (secret detection runs in both; `race` and SAST do not
+run on branches at all). The parent runs `main`'s file, so jobs a change
+removes from branches still show there until it is merged.
 
 GitLab's `race` job runs `make test-race`, the whole suite under the race
 detector, on Go 1.27, on `main` only; locally, `go test -race` on the touched
