@@ -158,7 +158,10 @@ branch that changes `.gitlab-ci.yml` is tested with its own version instead:
 the `ci-changes` job runs it as a child pipeline and `checks` skips itself, so
 it runs once (secret detection runs in both; `gates`, `race` and SAST do not
 run on branches at all). That job is itself only active once merged, so
-the first change after it shows whether it works.
+the first change after it showed whether it works: it did, on the change that
+limited branches to `checks` (2026-11-20), whose child pipeline ran only
+`checks` and secret detection while the parent, still on `main`'s file, ran
+SAST.
 
 GitLab's `race` job runs `make test-race`, the whole suite under the race
 detector, on Go 1.27, on `main` only; locally, `go test -race` on the touched
