@@ -75,7 +75,9 @@ configuration in `/muxx/config` and, with the default configuration, its data
 in `/muxx/data`.
 
 It is built from `Dockerfile.muxx`, a copy of mox's `Dockerfile`, when a
-release tag is pushed. To build it yourself, from a commit with a muxx tag:
+release tag is pushed. Its standard OCI labels and annotations name the
+release, the commit, the license and the Alpine base image it was built on, by
+digest. To build it yourself, from a commit with a muxx tag:
 
     tag=$(git describe --tags --exact-match --match 'muxx-*') &&
       docker build -f Dockerfile.muxx --build-arg DISTRIBUTION=$tag -t muxx:${tag#muxx-} .

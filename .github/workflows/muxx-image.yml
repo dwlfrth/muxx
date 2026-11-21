@@ -29,6 +29,7 @@ jobs:
         if [ "$GITHUB_REF_TYPE" != tag ]; then
           {
             echo "distribution=muxx-dev"
+            echo "description=muxx development build, not a release"
             echo "push=false"
           } >> "$GITHUB_OUTPUT"
           exit 0
@@ -41,13 +42,59 @@ jobs:
         # Only commits made on main itself, i.e. merge commits, not the commits of a
         # merged branch: CI never tested those as they are on main.
         git rev-list --first-parent origin/main | grep -qx "$GITHUB_SHA" || { echo "tag $tag is not on main" >&2; exit 1; }
+        # The release note's first line describes the release's image.
+        description=$(git tag -l --format='%(contents:subject)' "$tag")
+        [ -n "$description" ] || { echo "tag $tag has no release note" >&2; exit 1; }
         {
           echo "distribution=$tag"
+          echo "description=$description"
           echo "release=${tag#muxx-}"
           echo "push=true"
         } >> "$GITHUB_OUTPUT"
 
     - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+    # The image's metadata, as labels (docker inspect) and as annotations on the
+    # image and on its index, where GitHub reads the description: the index
+    # holds the image and its build provenance attestation. The base is
+    # alpine:latest resolved to its digest once, and both builds use that
+    # digest, so base.digest names the base the image was built on.
+    - name: Metadata
+      id: meta
+      env:
+        BASE_NAME: docker.io/library/alpine:latest
+        TITLE: ${{ steps.release.outputs.distribution }}
+        DESCRIPTION: ${{ steps.release.outputs.description }}
+        VERSION: ${{ steps.release.outputs.release || 'dev' }}
+        # The release tag, or the commit for a build that is not a release.
+        DOCREF: ${{ steps.release.outputs.release && steps.release.outputs.distribution || github.sha }}
+      run: |
+        digest=$(docker buildx imagetools inspect "$BASE_NAME" --format '{{json .Manifest}}' | jq -r .digest)
+        echo "$digest" | grep -qE '^sha256:[0-9a-f]{64}$' || { echo "no digest for $BASE_NAME: $digest" >&2; exit 1; }
+        meta="org.opencontainers.image.title=$TITLE
+        org.opencontainers.image.description=$DESCRIPTION
+        org.opencontainers.image.version=$VERSION
+        org.opencontainers.image.revision=$GITHUB_SHA
+        org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        org.opencontainers.image.url=https://ananas.sh/projects/muxx
+        org.opencontainers.image.documentation=https://github.com/$GITHUB_REPOSITORY/blob/$DOCREF/MUXX.md
+        org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY
+        org.opencontainers.image.licenses=MIT
+        org.opencontainers.image.authors=muxx@ananas.sh
+        org.opencontainers.image.vendor=ananas.sh
+        org.opencontainers.image.base.name=$BASE_NAME
+        org.opencontainers.image.base.digest=$digest"
+        {
+          echo "base=docker.io/library/alpine@$digest"
+          echo "labels<<EOF"
+          echo "$meta"
+          echo "EOF"
+          echo "annotations<<EOF"
+          echo "index:${meta//$'\n'/$'\n'index:}"
+          echo "manifest:${meta//$'\n'/$'\n'manifest:}"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+        echo "$meta"
 
     - name: Build for linux/amd64 and check the version
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -55,7 +102,9 @@ jobs:
         context: .
         file: Dockerfile.muxx
         platforms: linux/amd64
-        build-args: DISTRIBUTION=${{ steps.release.outputs.distribution }}
+        build-args: |
+          DISTRIBUTION=${{ steps.release.outputs.distribution }}
+          BASE=${{ steps.meta.outputs.base }}
         load: true
         tags: muxx:check
     - env:
@@ -91,7 +140,10 @@ jobs:
         context: .
         file: Dockerfile.muxx
         platforms: linux/amd64
-        build-args: DISTRIBUTION=${{ steps.release.outputs.distribution }}
-        labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+        build-args: |
+          DISTRIBUTION=${{ steps.release.outputs.distribution }}
+          BASE=${{ steps.meta.outputs.base }}
+        labels: ${{ steps.meta.outputs.labels }}
+        annotations: ${{ steps.meta.outputs.annotations }}
         push: ${{ steps.release.outputs.push == 'true' }}
         tags: ghcr.io/dwlfrth/muxx:${{ steps.release.outputs.release || 'check' }}

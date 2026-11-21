@@ -2,6 +2,12 @@
 # the release tag as build variable, git and the repository for the version
 # stamp (see Dockerfile.muxx.dockerignore), the Go version CI tests with, and
 # the muxx names.
+
+# The base of the image. The image workflow sets it to alpine:latest resolved
+# to its digest, so the base it records in the image's metadata is the one it
+# was built on.
+ARG BASE=alpine:latest
+
 FROM golang:1.27-alpine AS build
 RUN apk add --no-cache git
 WORKDIR /build
@@ -11,7 +17,7 @@ RUN test -n "$DISTRIBUTION" || { echo "build argument DISTRIBUTION is required, 
 RUN GOPROXY=off CGO_ENABLED=0 go build -trimpath -o /muxx -ldflags "-X github.com/mjl-/mox/moxvar.Distribution=$DISTRIBUTION"
 
 # Using latest may break at some point, but will hopefully be convenient most of the time.
-FROM alpine:latest
+FROM ${BASE}
 WORKDIR /muxx
 COPY --from=build /muxx /bin/muxx
 
