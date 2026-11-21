@@ -79,6 +79,24 @@ actions are pinned by commit, with the version as comment; bump them by hand.
 version stamp: excluding a tracked file there makes every image report local
 changes.
 
+The workflow's `Metadata` step sets the standard OCI fields, chosen by the
+owner: title `muxx-<release>`, description, version `<release>`, revision,
+created, url, documentation (`MUXX.md` at the release tag), source, licenses,
+authors, vendor, and base name and digest. They go on as labels (`docker
+inspect`) and as annotations on both the image and its index: buildx adds a
+build provenance attestation (the `unknown/unknown` entry on GitHub's package
+page, kept by choice), which makes the pushed image an index, and GitHub reads
+the package description only from the index's annotations. Each package
+version is a release, so its description is the first line of the release note
+(the tag message), and a tag without one is refused; a build on `main` is
+described as a development build. Only the first line: the build action takes
+labels and annotations one per line. The base is `alpine:latest` resolved to
+its digest before building, and both builds use that digest
+(`Dockerfile.muxx`'s `BASE` argument), so `base.digest` is the base the image
+was built on; a local build without the argument uses `alpine:latest`. Images
+of releases up to `muxx-202611210226` have none of this: a release's image is
+never pushed again.
+
 A build of muxx from a commit without a release tag sets the variable to
 `muxx-dev`, so it reads `muxx dev (mox <version>)` and cannot be mistaken for
 a release; the command is in `MUXX.md`. Builds without the variable stay plain
