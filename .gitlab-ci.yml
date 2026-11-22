@@ -116,6 +116,9 @@ race:
 # keyword: the tag as title and its message as description, as on GitHub. The
 # image is built on GitHub, which this job cannot see. The keyword needs glab in
 # the image and a script; the image is pinned, bump it by hand.
+# The description is a file the script writes: GitLab puts description between
+# double quotes in the glab command without escaping, so a message with a quote
+# or backtick broke the job. glab reads the file when one exists at that path.
 release:
   stage: release
   image: registry.gitlab.com/gitlab-org/cli:v1.130.0
@@ -123,7 +126,8 @@ release:
   - if: $CI_COMMIT_TAG =~ /^muxx-[0-9]{12}$/
   script:
   - echo "release $CI_COMMIT_TAG"
+  - printf '%s\n' "$CI_COMMIT_TAG_MESSAGE" > release-notes.md
   release:
     tag_name: $CI_COMMIT_TAG
     name: $CI_COMMIT_TAG
-    description: $CI_COMMIT_TAG_MESSAGE
+    description: ./release-notes.md
