@@ -795,9 +795,10 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 
 	# Use an rspamd server (version 4.1.1 or later) for spam filtering of incoming
 	# messages, and train it as the account's junk filter is trained. Without this
-	# section, nothing changes. With it, for each delivered address, after the
-	# delivery rate limits, mailing list allow rules (ListAllowDomain), DMARC reject
-	# policies (with exceptions for rulesets with IsForward) and a destination's
+	# section, nothing changes. For setting up rspamd itself, see rspamd/README.md in
+	# the source. With it, for each delivered address, after the delivery rate limits,
+	# mailing list allow rules (ListAllowDomain), DMARC reject policies (with
+	# exceptions for rulesets with IsForward) and a destination's
 	# MessageAuthRequiredSMTPError: a message whose DMARC-validated From address the
 	# account has sent to in the past 3 years is accepted, and so is a message with a
 	# valid subjectpass token in its subject, if the account has SubjectPass; any

@@ -239,27 +239,33 @@ The integration works with rspamd's shipped defaults. Points worth knowing:
   training. Alternatively, `secure_ip` grants full access without a password
   to listed addresses. Keep `secure_ip` to what needs it: an address that
   later belongs to another host gets the same access. `secure_ip` encrypts
-  nothing.
+  nothing. See rspamd's
+  [controller worker](https://docs.rspamd.com/workers/controller).
 - **Transport.** Across an untrusted network, use https (the controller serves
   TLS natively since rspamd 4.0): it is the only option that protects the
   messages and the password. On the same machine or a trusted network, http is
   fine.
 - **Redis.** rspamd's greylisting and rate limits need Redis, and its Bayes
   classifier uses Redis as its default backend. Without Redis there is no
-  greylisting.
+  greylisting. See rspamd's
+  [Redis configuration](https://docs.rspamd.com/configuration/redis).
 - **Bayes.** rspamd only uses its classifier once both spam and ham have
   `min_learns` learned messages (200 by default). Until then the admin page
   shows the progress. Per-user statistics need `per_user` on the classifier;
   muxx always sends the user, so turning it on later needs no muxx change.
+  See rspamd's
+  [statistics settings](https://docs.rspamd.com/configuration/statistic).
 - **Autolearn** is off by default in rspamd, and muxx does not need it. If you
-  turn it on, rspamd learns from its own verdicts at delivery.
+  turn it on, rspamd learns from its own verdicts at delivery. Also in the
+  statistics settings.
 - **Relays and forwarders.** rspamd judges the connecting IP. For mail that
   arrives through a relay or a forwarding service, that is the relay's or
   forwarder's IP, so IP-based checks (SPF, DNS blocklists, IP reputation) look
   at the wrong host. rspamd's `external_relay` module (off by default) can take
   the original sender's IP from the relay's `Received` header. A muxx ruleset
   with `IsForward` only affects mox's own checks and the DMARC reject policy,
-  not rspamd.
+  not rspamd. See rspamd's
+  [external_relay module](https://docs.rspamd.com/modules/external_relay).
 - **Local addresses.** rspamd skips several checks (e.g. SPF, greylisting,
   DNSBLs) for IPs in its `local_addrs`, private ranges by default. If muxx sees
   incoming mail from private addresses, e.g. behind a proxy, configure
@@ -267,6 +273,63 @@ The integration works with rspamd's shipped defaults. Points worth knowing:
 - **Version.** The controller serves `/checkv3` since rspamd 4.1.1. With an
   older one, checks fall back to mox's own, and the log and admin page say
   "rspamd 4.1.1 or later is required".
+
+### Example rspamd configuration
+
+A working set of files, as used with muxx in production, with placeholders for
+the secrets and host names. They go in rspamd's `local.d` directory
+(`/etc/rspamd/local.d` in rspamd's container image); everything else stays at
+rspamd's defaults. Keep them readable for rspamd only, e.g. owner root, group
+rspamd, mode 0640.
+
+`worker-controller.inc`: two different passwords, stored hashed, and
+password-less access only from the machine itself.
+
+```
+password = "<output of: rspamadm pw, for the read-only password>";
+enable_password = "<output of: rspamadm pw, for the enable password>";
+allow_file_and_shm_inputs = false;
+secure_ip = ["127.0.0.1", "::1"];
+```
+
+muxx's `Password` and `EnablePassword` take the two passwords themselves, not
+the hashes. `allow_file_and_shm_inputs = false` refuses requests that ask rspamd
+to read a message from a local file or shared memory instead of the request
+body; muxx always sends the message in the request.
+
+`worker-normal.inc` and `worker-proxy.inc`, the same refusal for the other
+workers that accept messages:
+
+```
+allow_file_and_shm_inputs = false;
+```
+
+`redis.conf`, for greylisting, rate limits and Bayes:
+
+```
+servers = "<redis host>:6379";
+password = "<redis password>";
+timeout = 1s;
+db = "0";
+```
+
+The Redis server, in its own `redis.conf`, with a password for the default
+user and without the commands that can wipe or reconfigure it. Persistence keeps
+the Bayes data across restarts, and the memory limit evicts only keys with an
+expiry, so Bayes tokens are not evicted:
+
+```
+user default on ><redis password> ~* &* +@all -flushall -flushdb -config -debug -shutdown -module -replicaof -slaveof -acl -failover -monitor
+dir /data
+save 3600 1 300 100 60 10000
+appendonly yes
+appendfsync everysec
+maxmemory 512mb
+maxmemory-policy volatile-ttl
+```
+
+Check the rspamd configuration with `rspamadm configtest` before restarting
+rspamd.
 
 ## Compared with rspamd's usual deployment
 
