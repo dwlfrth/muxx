@@ -5,6 +5,6 @@ server by Mechiel Lukkien, with additional features. Every muxx feature is off
 unless configured: without configuration, muxx behaves exactly like mox.
 
 - What muxx is, how it relates to mox, its versions and images:
-  [MUXX.md](../MUXX.md)
+  [MUXX.md](https://github.com/dwlfrth/muxx/blob/main/MUXX.md)
 - Everything else, from installation to configuration, is mox's:
-  [README.md](../README.md)
+  [README.md](https://github.com/dwlfrth/muxx/blob/main/README.md)
