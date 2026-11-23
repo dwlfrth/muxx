@@ -1031,6 +1031,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 	// remove any draft message.
 	acc.WithWLock(func() {
 		var changes []store.Change
+		var rspamdLearns []store.RspamdLearn
 
 		metricked := false
 		defer func() {
@@ -1085,6 +1086,9 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					xcheckf(ctx, err, "update modseq of mailbox of replied/forwarded message")
 
 					changes = append(changes, rm.ChangeFlags(oflags, rmb))
+					if l, ok := store.RspamdLearnFlags(rm, oflags, rm.Flags); ok {
+						rspamdLearns = append(rspamdLearns, l)
+					}
 
 					err = acc.RetrainMessages(ctx, log, tx, []store.Message{rm})
 					xcheckf(ctx, err, "retraining messages after reply/forward")
@@ -1106,9 +1110,10 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 					err = q.IDs(&msgIDs)
 					xcheckf(ctx, err, "listing messages in thread to archive")
 					if len(msgIDs) > 0 {
-						ids, nchanges := xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, &modseq, true)
+						ids, nchanges, learns := xops.MessageMoveTx(ctx, log, acc, tx, msgIDs, mbArchive, &modseq, true)
 						newIDs = append(newIDs, ids...)
 						changes = append(changes, nchanges...)
+						rspamdLearns = append(rspamdLearns, learns...)
 					}
 				}
 			}
@@ -1162,6 +1167,7 @@ func (w Webmail) MessageSubmit(ctx context.Context, m SubmitMessage) {
 			changes = append(changes, sentm.ChangeAddUID(sentmb), sentmb.ChangeCounts())
 		})
 		newIDs = nil
+		acc.RspamdQueue(log, rspamdLearns)
 
 		store.BroadcastChanges(acc, changes)
 	})

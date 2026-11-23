@@ -892,6 +892,29 @@ export interface HookRetired {
 	KeepUntil: Date
 }
 
+// RspamdStatus is the status of rspamd, for the admin index page.
+export interface RspamdStatus {
+	Configured: boolean  // Whether rspamd is configured in mox.conf. Other fields are only set if configured.
+	URL: string  // Configured URL of the rspamd controller, which serves its web interface.
+	Version: string  // Version of rspamd, empty if not reachable or not in its answer.
+	TooOld: boolean  // Whether the version is older than MinVersion.
+	MinVersion: string
+	Error: string  // If rspamd is not reachable.
+	LearnQueue: number  // Messages waiting to be sent for training.
+	Bayes?: RspamdBayes[] | null
+}
+
+// RspamdBayes is the training state of a binary classifier of rspamd, which
+// only classifies once both Spam and Ham reach MinLearns. With PerUser, the counts
+// are for all users together.
+export interface RspamdBayes {
+	Name: string
+	PerUser: boolean
+	MinLearns: number
+	Spam: number
+	Ham: number
+}
+
 // WebserverConfig is the combination of WebDomainRedirects and WebHandlers
 // from the domains.conf configuration file.
 export interface WebserverConfig {
@@ -1161,7 +1184,7 @@ export enum AuthResult {
 	AuthAborted = "aborted",
 }
 
-export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"Canonicalization":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"ConfigDomain":true,"DANECheckResult":true,"DKIM":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARC":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Dynamic":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"Hook":true,"HookFilter":true,"HookResult":true,"HookRetired":true,"HookRetiredFilter":true,"HookRetiredSort":true,"HookSort":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"IncomingWebhook":true,"JunkFilter":true,"LoginAttempt":true,"MTASTS":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"MsgResult":true,"MsgRetired":true,"OutgoingWebhook":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"RetiredFilter":true,"RetiredSort":true,"Reverse":true,"Route":true,"Row":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Selector":true,"Sort":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSPublicKey":true,"TLSRPT":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportFail":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebInternal":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
+export const structTypes: {[typename: string]: boolean} = {"Account":true,"Address":true,"AddressAlias":true,"Alias":true,"AliasAddress":true,"AuthResults":true,"AutoconfCheckResult":true,"AutodiscoverCheckResult":true,"AutodiscoverSRV":true,"AutomaticJunkFlags":true,"Canonicalization":true,"CheckResult":true,"ClientConfigs":true,"ClientConfigsEntry":true,"ConfigDomain":true,"DANECheckResult":true,"DKIM":true,"DKIMAuthResult":true,"DKIMCheckResult":true,"DKIMRecord":true,"DMARC":true,"DMARCCheckResult":true,"DMARCRecord":true,"DMARCSummary":true,"DNSSECResult":true,"DateRange":true,"Destination":true,"Directive":true,"Domain":true,"DomainFeedback":true,"Dynamic":true,"Evaluation":true,"EvaluationStat":true,"Extension":true,"FailureDetails":true,"Filter":true,"HoldRule":true,"Hook":true,"HookFilter":true,"HookResult":true,"HookRetired":true,"HookRetiredFilter":true,"HookRetiredSort":true,"HookSort":true,"IPDomain":true,"IPRevCheckResult":true,"Identifiers":true,"IncomingWebhook":true,"JunkFilter":true,"LoginAttempt":true,"MTASTS":true,"MTASTSCheckResult":true,"MTASTSRecord":true,"MX":true,"MXCheckResult":true,"Modifier":true,"Msg":true,"MsgResult":true,"MsgRetired":true,"OutgoingWebhook":true,"Pair":true,"Policy":true,"PolicyEvaluated":true,"PolicyOverrideReason":true,"PolicyPublished":true,"PolicyRecord":true,"Record":true,"Report":true,"ReportMetadata":true,"ReportRecord":true,"Result":true,"ResultPolicy":true,"RetiredFilter":true,"RetiredSort":true,"Reverse":true,"Route":true,"Row":true,"RspamdBayes":true,"RspamdStatus":true,"Ruleset":true,"SMTPAuth":true,"SPFAuthResult":true,"SPFCheckResult":true,"SPFRecord":true,"SRV":true,"SRVConfCheckResult":true,"STSMX":true,"Selector":true,"Sort":true,"SubjectPass":true,"Summary":true,"SuppressAddress":true,"TLSCheckResult":true,"TLSPublicKey":true,"TLSRPT":true,"TLSRPTCheckResult":true,"TLSRPTDateRange":true,"TLSRPTRecord":true,"TLSRPTSummary":true,"TLSRPTSuppressAddress":true,"TLSReportRecord":true,"TLSResult":true,"Transport":true,"TransportDirect":true,"TransportFail":true,"TransportSMTP":true,"TransportSocks":true,"URI":true,"WebForward":true,"WebHandler":true,"WebInternal":true,"WebRedirect":true,"WebStatic":true,"WebserverConfig":true}
 export const stringsTypes: {[typename: string]: boolean} = {"Align":true,"AuthResult":true,"CSRFToken":true,"DMARCPolicy":true,"IP":true,"Localpart":true,"Mode":true,"RUA":true}
 export const intsTypes: {[typename: string]: boolean} = {}
 export const types: TypenameMap = {
@@ -1257,6 +1280,8 @@ export const types: TypenameMap = {
 	"HookRetiredFilter": {"Name":"HookRetiredFilter","Docs":"","Fields":[{"Name":"Max","Docs":"","Typewords":["int32"]},{"Name":"IDs","Docs":"","Typewords":["[]","int64"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"Submitted","Docs":"","Typewords":["string"]},{"Name":"LastActivity","Docs":"","Typewords":["string"]},{"Name":"Event","Docs":"","Typewords":["string"]}]},
 	"HookRetiredSort": {"Name":"HookRetiredSort","Docs":"","Fields":[{"Name":"Field","Docs":"","Typewords":["string"]},{"Name":"LastID","Docs":"","Typewords":["int64"]},{"Name":"Last","Docs":"","Typewords":["any"]},{"Name":"Asc","Docs":"","Typewords":["bool"]}]},
 	"HookRetired": {"Name":"HookRetired","Docs":"","Fields":[{"Name":"ID","Docs":"","Typewords":["int64"]},{"Name":"QueueMsgID","Docs":"","Typewords":["int64"]},{"Name":"FromID","Docs":"","Typewords":["string"]},{"Name":"MessageID","Docs":"","Typewords":["string"]},{"Name":"Subject","Docs":"","Typewords":["string"]},{"Name":"Extra","Docs":"","Typewords":["{}","string"]},{"Name":"Account","Docs":"","Typewords":["string"]},{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Authorization","Docs":"","Typewords":["bool"]},{"Name":"IsIncoming","Docs":"","Typewords":["bool"]},{"Name":"OutgoingEvent","Docs":"","Typewords":["string"]},{"Name":"Payload","Docs":"","Typewords":["string"]},{"Name":"Submitted","Docs":"","Typewords":["timestamp"]},{"Name":"SupersededByID","Docs":"","Typewords":["int64"]},{"Name":"Attempts","Docs":"","Typewords":["int32"]},{"Name":"Results","Docs":"","Typewords":["[]","HookResult"]},{"Name":"Success","Docs":"","Typewords":["bool"]},{"Name":"LastActivity","Docs":"","Typewords":["timestamp"]},{"Name":"KeepUntil","Docs":"","Typewords":["timestamp"]}]},
+	"RspamdStatus": {"Name":"RspamdStatus","Docs":"","Fields":[{"Name":"Configured","Docs":"","Typewords":["bool"]},{"Name":"URL","Docs":"","Typewords":["string"]},{"Name":"Version","Docs":"","Typewords":["string"]},{"Name":"TooOld","Docs":"","Typewords":["bool"]},{"Name":"MinVersion","Docs":"","Typewords":["string"]},{"Name":"Error","Docs":"","Typewords":["string"]},{"Name":"LearnQueue","Docs":"","Typewords":["int32"]},{"Name":"Bayes","Docs":"","Typewords":["[]","RspamdBayes"]}]},
+	"RspamdBayes": {"Name":"RspamdBayes","Docs":"","Fields":[{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"PerUser","Docs":"","Typewords":["bool"]},{"Name":"MinLearns","Docs":"","Typewords":["int64"]},{"Name":"Spam","Docs":"","Typewords":["int64"]},{"Name":"Ham","Docs":"","Typewords":["int64"]}]},
 	"WebserverConfig": {"Name":"WebserverConfig","Docs":"","Fields":[{"Name":"WebDNSDomainRedirects","Docs":"","Typewords":["[]","[]","Domain"]},{"Name":"WebDomainRedirects","Docs":"","Typewords":["[]","[]","string"]},{"Name":"WebHandlers","Docs":"","Typewords":["[]","WebHandler"]}]},
 	"WebHandler": {"Name":"WebHandler","Docs":"","Fields":[{"Name":"LogName","Docs":"","Typewords":["string"]},{"Name":"Domain","Docs":"","Typewords":["string"]},{"Name":"PathRegexp","Docs":"","Typewords":["string"]},{"Name":"DontRedirectPlainHTTP","Docs":"","Typewords":["bool"]},{"Name":"Compress","Docs":"","Typewords":["bool"]},{"Name":"WebStatic","Docs":"","Typewords":["nullable","WebStatic"]},{"Name":"WebRedirect","Docs":"","Typewords":["nullable","WebRedirect"]},{"Name":"WebForward","Docs":"","Typewords":["nullable","WebForward"]},{"Name":"WebInternal","Docs":"","Typewords":["nullable","WebInternal"]},{"Name":"Name","Docs":"","Typewords":["string"]},{"Name":"DNSDomain","Docs":"","Typewords":["Domain"]}]},
 	"WebStatic": {"Name":"WebStatic","Docs":"","Fields":[{"Name":"StripPrefix","Docs":"","Typewords":["string"]},{"Name":"Root","Docs":"","Typewords":["string"]},{"Name":"ListFiles","Docs":"","Typewords":["bool"]},{"Name":"ContinueNotFound","Docs":"","Typewords":["bool"]},{"Name":"ResponseHeaders","Docs":"","Typewords":["{}","string"]}]},
@@ -1380,6 +1405,8 @@ export const parser = {
 	HookRetiredFilter: (v: any) => parse("HookRetiredFilter", v) as HookRetiredFilter,
 	HookRetiredSort: (v: any) => parse("HookRetiredSort", v) as HookRetiredSort,
 	HookRetired: (v: any) => parse("HookRetired", v) as HookRetired,
+	RspamdStatus: (v: any) => parse("RspamdStatus", v) as RspamdStatus,
+	RspamdBayes: (v: any) => parse("RspamdBayes", v) as RspamdBayes,
 	WebserverConfig: (v: any) => parse("WebserverConfig", v) as WebserverConfig,
 	WebHandler: (v: any) => parse("WebHandler", v) as WebHandler,
 	WebStatic: (v: any) => parse("WebStatic", v) as WebStatic,
@@ -1981,6 +2008,15 @@ export class Client {
 		const returnTypes: string[][] = [["bool"]]
 		const params: any[] = []
 		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as boolean
+	}
+
+	// RspamdStatus returns the status of rspamd.
+	async RspamdStatus(): Promise<RspamdStatus> {
+		const fn: string = "RspamdStatus"
+		const paramTypes: string[][] = []
+		const returnTypes: string[][] = [["RspamdStatus"]]
+		const params: any[] = []
+		return await _sherpaCall(this.baseURL, this.authState, { ...this.options }, paramTypes, returnTypes, fn, params) as RspamdStatus
 	}
 
 	// WebserverConfig returns the current webserver config

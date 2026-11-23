@@ -62,6 +62,7 @@ import (
 	"github.com/mjl-/mox/mtastsdb"
 	"github.com/mjl-/mox/publicsuffix"
 	"github.com/mjl-/mox/queue"
+	"github.com/mjl-/mox/rspamd"
 	"github.com/mjl-/mox/smtp"
 	"github.com/mjl-/mox/spf"
 	"github.com/mjl-/mox/store"
@@ -2312,6 +2313,50 @@ func (Admin) LogLevelRemove(ctx context.Context, pkg string) {
 // CheckUpdatesEnabled returns whether checking for updates is enabled.
 func (Admin) CheckUpdatesEnabled(ctx context.Context) bool {
 	return mox.Conf.Static.CheckUpdates
+}
+
+// RspamdStatus is the status of rspamd, for the admin index page.
+type RspamdStatus struct {
+	Configured bool   // Whether rspamd is configured in mox.conf. Other fields are only set if configured.
+	URL        string // Configured URL of the rspamd controller, which serves its web interface.
+	Version    string // Version of rspamd, empty if not reachable or not in its answer.
+	TooOld     bool   // Whether the version is older than MinVersion.
+	MinVersion string
+	Error      string // If rspamd is not reachable.
+	LearnQueue int    // Messages waiting to be sent for training.
+	Bayes      []RspamdBayes
+}
+
+// RspamdBayes is the training state of a binary classifier of rspamd, which
+// only classifies once both Spam and Ham reach MinLearns. With PerUser, the counts
+// are for all users together.
+type RspamdBayes struct {
+	Name      string
+	PerUser   bool
+	MinLearns int64
+	Spam      int64
+	Ham       int64
+}
+
+// RspamdStatus returns the status of rspamd.
+func (Admin) RspamdStatus(ctx context.Context) (s RspamdStatus) {
+	conf := mox.Conf.Static.Rspamd
+	if conf == nil {
+		return
+	}
+	s = RspamdStatus{Configured: true, URL: conf.URL, MinVersion: rspamd.MinVersion, LearnQueue: rspamd.LearnQueueLength()}
+	st, err := rspamd.GetStat(ctx, *conf)
+	if err != nil {
+		s.Error = err.Error()
+		return
+	}
+	s.Version = st.Version
+	// Without a version in the answer, it is unknown, not too old.
+	s.TooOld = st.Version != "" && rspamd.TooOld(st.Version)
+	for _, b := range st.Bayes {
+		s.Bayes = append(s.Bayes, RspamdBayes(b))
+	}
+	return
 }
 
 // WebserverConfig is the combination of WebDomainRedirects and WebHandlers

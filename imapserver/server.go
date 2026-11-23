@@ -3645,6 +3645,7 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 	dst = xcheckmailboxname(dst, false)
 
 	var cleanupIDs []int64
+	var rspamdLearns []store.RspamdLearn
 	defer func() {
 		for _, id := range cleanupIDs {
 			p := c.account.MessagePath(id)
@@ -3713,12 +3714,14 @@ func (c *conn) cmdRename(tag, cmd string, p *parser) {
 			q.FilterEqual("Expunged", false)
 			q.SortAsc("UID")
 
-			newIDs, chl := c.xmoveMessages(tx, q, 0, modseq, &mbSrc, &mbDst)
+			newIDs, chl, learns := c.xmoveMessages(tx, q, 0, modseq, &mbSrc, &mbDst)
 			changes = append(changes, chl...)
 			cleanupIDs = newIDs
+			rspamdLearns = learns
 		})
 
 		cleanupIDs = nil
+		c.account.RspamdQueue(c.log, rspamdLearns)
 
 		c.broadcast(changes)
 	})
@@ -4710,6 +4713,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 	var flags []store.Flags
 	var keywords [][]string
 	var modseq store.ModSeq // For messages in new mailbox, assigned when first message is copied.
+	var rspamdLearns []store.RspamdLearn
 
 	c.account.WithWLock(func() {
 
@@ -4801,10 +4805,14 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 					m.IsReject = false
 				}
 				m.TrainedJunk = nil
-				m.JunkFlagsForMailboxMove(mbSrc, mbDst, conf)
+				oflags := m.Flags
+				m.RspamdJunkFlagsForMailboxMove(mbSrc, mbDst, conf)
 				m.SaveDate = &now
 				err := tx.Insert(&m)
 				xcheckf(err, "inserting message")
+				if l, ok := store.RspamdLearnFlags(m, oflags, m.Flags); ok {
+					rspamdLearns = append(rspamdLearns, l)
+				}
 				msgs[uid] = m
 				nmsgs[i] = m
 				newUIDs = append(newUIDs, m.UID)
@@ -4859,6 +4867,7 @@ func (c *conn) cmdxCopy(isUID bool, tag, cmd string, p *parser) {
 		})
 
 		newIDs = nil
+		c.account.RspamdQueue(c.log, rspamdLearns)
 
 		// Broadcast changes to other connections.
 		if len(newUIDs) > 0 {
@@ -4914,6 +4923,7 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 	var modseq store.ModSeq
 
 	var cleanupIDs []int64
+	var rspamdLearns []store.RspamdLearn
 	defer func() {
 		for _, id := range cleanupIDs {
 			p := c.account.MessagePath(id)
@@ -4952,12 +4962,14 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 			q.FilterEqual("Expunged", false)
 			q.SortAsc("UID")
 
-			newIDs, chl := c.xmoveMessages(tx, q, len(uids), modseq, &mbSrc, &mbDst)
+			newIDs, chl, learns := c.xmoveMessages(tx, q, len(uids), modseq, &mbSrc, &mbDst)
 			changes = append(changes, chl...)
 			cleanupIDs = newIDs
+			rspamdLearns = learns
 		})
 
 		cleanupIDs = nil
+		c.account.RspamdQueue(c.log, rspamdLearns)
 
 		c.broadcast(changes)
 	})
@@ -4999,8 +5011,9 @@ func (c *conn) cmdxMove(isUID bool, tag, cmd string, p *parser) {
 	}
 }
 
-// q must yield messages from a single mailbox.
-func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expectCount int, modseq store.ModSeq, mbSrc, mbDst *store.Mailbox) (newIDs []int64, changes []store.Change) {
+// q must yield messages from a single mailbox. The caller queues rspamdLearns
+// after committing.
+func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expectCount int, modseq store.ModSeq, mbSrc, mbDst *store.Mailbox) (newIDs []int64, changes []store.Change, rspamdLearns []store.RspamdLearn) {
 	newIDs = make([]int64, 0, expectCount)
 	var commit bool
 	defer func() {
@@ -5064,10 +5077,14 @@ func (c *conn) xmoveMessages(tx *bstore.Tx, q *bstore.Query[store.Message], expe
 			nm.Seen = false
 		}
 
-		nm.JunkFlagsForMailboxMove(*mbSrc, *mbDst, accConf)
+		oflags := nm.Flags
+		nm.RspamdJunkFlagsForMailboxMove(*mbSrc, *mbDst, accConf)
 
 		err = tx.Update(&nm)
 		xcheckf(err, "updating message with new mailbox")
+		if l, ok := store.RspamdLearnFlags(nm, oflags, nm.Flags); ok {
+			rspamdLearns = append(rspamdLearns, l)
+		}
 
 		mbDst.Add(nm.MailboxCounts())
 
@@ -5207,6 +5224,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 	var updated []store.Message
 	var changed []store.Message // ModSeq more recent than unchangedSince, will be in MODIFIED response code, and we will send untagged fetch responses so client is up to date.
 	var modseq store.ModSeq     // Assigned when needed.
+	var rspamdLearns []store.RspamdLearn
 	modified := map[int64]bool{}
 
 	c.account.WithWLock(func() {
@@ -5302,6 +5320,9 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 				m.ModSeq = modseq
 				modified[m.ID] = true
 				updated = append(updated, m)
+				if l, ok := store.RspamdLearnFlags(m, origFlags, m.Flags); ok {
+					rspamdLearns = append(rspamdLearns, l)
+				}
 
 				changes = append(changes, m.ChangeFlags(origFlags, mb))
 
@@ -5323,6 +5344,7 @@ func (c *conn) cmdxStore(isUID bool, tag, cmd string, p *parser) {
 			err = c.account.RetrainMessages(context.TODO(), c.log, tx, updated)
 			xcheckf(err, "training messages")
 		})
+		c.account.RspamdQueue(c.log, rspamdLearns)
 
 		c.broadcast(changes)
 	})

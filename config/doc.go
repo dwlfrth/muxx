@@ -793,6 +793,126 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 	# (optional)
 	QuotaMessageSize: 0
 
+	# Use an rspamd server (version 4.1.1 or later) for spam filtering of incoming
+	# messages, and train it as the account's junk filter is trained. Without this
+	# section, nothing changes. With it, for each delivered address, after the
+	# delivery rate limits, mailing list allow rules (ListAllowDomain), DMARC reject
+	# policies (with exceptions for rulesets with IsForward) and a destination's
+	# MessageAuthRequiredSMTPError: a message whose DMARC-validated From address the
+	# account has sent to in the past 3 years is accepted, and so is a message with a
+	# valid subjectpass token in its subject, if the account has SubjectPass; any
+	# other message is judged by rspamd, in place of the reputation of earlier
+	# messages, the first-time sender delay, the junk filter and DNSBLs. Messages to
+	# addresses for DMARC and TLS reports are processed without rspamd. The rspamd
+	# action decides delivery: 'no action' delivers to the normal mailbox (or the
+	# Introbox for unknown senders); 'add header' and 'rewrite subject' deliver with
+	# the $Junk flag set, without changing the message, to the mailbox with the Junk
+	# special-use role, also for messages matching a ruleset (its mailbox would get
+	# automatic junk flags that can clear $Junk); if the account has no mailbox with
+	# that role, it is created (with the name configured for Junk in InitialMailboxes,
+	# or Junk), or an existing mailbox with that name gets the role, unless
+	# NoJunkMailboxCreate is set; 'reject' rejects with a permanent error, delivered
+	# to AcceptRejectsToMailbox of a matching ruleset if set, and, as without rspamd,
+	# with a subjectpass token for a sender without reputation and with DMARC pass, if
+	# the account has SubjectPass; 'greylist' and 'soft reject' reject with a
+	# temporary error, always, so the sender tries again. If rspamd cannot be used,
+	# e.g. it is unreachable, too old, rejects the message for its size, or skipped
+	# the message without a verdict, the error is logged and mox's own checks decide,
+	# as without rspamd. Each check sends rspamd the connecting IP, which is that of
+	# the relay if mail arrives through a relay: rspamd's external_relay module can
+	# find the original sender. The same holds for mail from a forwarding service: a
+	# ruleset with IsForward only affects mox's own checks and the DMARC reject
+	# policy, while rspamd judges the message with the forwarder's IP, unless its
+	# external_relay module is configured for the forwarder. rspamd skips several
+	# checks (e.g. SPF, greylisting, DNSBLs) for IPs in its local_addrs, private
+	# ranges by default. Each check also sends the delivered address (without catchall
+	# separator suffix) as deliver_to, so rspamd can keep statistics per user when its
+	# Bayes classifier has per_user set. Each delivered address is checked separately,
+	# one after another; for a message to many, no more checks are started after 5
+	# minutes, and the remaining addresses get the most recent result, noted in the
+	# reason header, so the sender gets a reply within the 10 minutes it waits.
+	# Training follows the account's junk filter: a message is learned as spam when it
+	# gets only the $Junk flag, and as ham when it gets only $NotJunk, whether a mail
+	# client changes the flags, a move or copy changes them (always $Junk into the
+	# mailbox with the Junk special-use role, and per AutomaticJunkFlags for other
+	# mailboxes), or a reply or forward in the webmail sets $NotJunk. With rspamd, a
+	# message moved or copied out of the mailbox with the Junk role to a neutral
+	# mailbox, e.g. Inbox with the default AutomaticJunkFlags, also gets $NotJunk, so
+	# taking a message out of Junk trains it as ham; not when moved to the mailbox
+	# with the Trash role. The account's flags and junk filter are trained with the
+	# same flags, so that training remains when rspamd is removed. The junk filter is
+	# also trained with each message delivered to Junk with rspamd's junk verdict, as
+	# for any message added with $Junk, so it carries rspamd's verdicts when rspamd is
+	# removed; taking such a message out of Junk retrains it as ham. rspamd cannot
+	# forget a message, so one the junk filter untrains, by having neither or both
+	# flags or by being removed, stays learned in rspamd. A mailbox in
+	# NeutralMailboxRegexp clears both flags, so moving junk to Trash when it is
+	# neutral makes the junk filter forget the message while rspamd keeps it as spam.
+	# To keep messages moved from Junk to Trash as spam in both, set all three regular
+	# expressions of AutomaticJunkFlags with Trash in none of them, so a move to Trash
+	# keeps the flags, e.g. JunkMailboxRegexp ^(junk|spam), NeutralMailboxRegexp
+	# ^(inbox|introbox|neutral|postmaster|dmarc|tlsrpt|rejects), NotJunkMailboxRegexp
+	# ^(archive|sent); then only the mailboxes in NotJunkMailboxRegexp make a message
+	# nonjunk, so list every mailbox that should. rspamd does not learn messages when
+	# they are added, e.g. on delivery with its own verdict or by upload. Training is
+	# sent after the change is saved, in the background, one message at a time, and is
+	# best-effort: up to 1000 messages are queued, more are dropped and counted, and
+	# queued messages are lost when mox stops. rspamd's autolearn can learn during
+	# delivery. rspamd's greylisting and rate limits need a Redis server configured in
+	# rspamd, and its Bayes classifier, also with per-user statistics, uses Redis as
+	# its default backend. The admin web interface shows the status of rspamd with a
+	# link to its web interface at URL, and, while a Bayes classifier of rspamd has
+	# learned fewer messages of a class than its min_learns, below which rspamd does
+	# not use it, how many it has learned (for all users together if it has per_user).
+	# Metrics are named mox_rspamd_*. (optional)
+	Rspamd:
+
+		# Base URL of the rspamd controller, e.g. http://localhost:11334: checks use
+		# /checkv3 and training /learnspam and /learnham, both served by the controller.
+		# rspamd's documentation lists /checkv3 only for the normal worker and the proxy,
+		# but the controller serves it since rspamd 4.1.1; with an older controller, mox
+		# logs that rspamd is too old and its own checks decide. Must be http or https,
+		# without credentials or query string. Across an untrusted network, use https
+		# (served natively by the controller since rspamd 4.0): it is the only option that
+		# protects the messages and the password. On the same machine or a trusted
+		# network, http is fine, with the controller's secure_ip listing mox's IP, or a
+		# Password. secure_ip encrypts nothing. Requests go through a proxy if mox's
+		# environment sets one (HTTP_PROXY, HTTPS_PROXY, NO_PROXY), except to loopback
+		# addresses; a proxy sees the password and messages unless the URL is https. The
+		# admin web interface links to this URL for rspamd's own web interface, so it
+		# should be reachable from the browser for the link to work.
+		URL:
+
+		# Password for the rspamd controller, sent as Password header with checks and
+		# status requests. rspamd's controller has two passwords: password, for read-only
+		# commands such as checks, and enable_password, for privileged commands such as
+		# training. If the controller has only one of them set, it is used for both, and
+		# this one field is enough. Not needed if the controller's secure_ip lists mox's
+		# IP. (optional)
+		Password:
+
+		# The controller's enable_password, sent as Password header with training
+		# (/learnspam and /learnham), which rspamd only accepts with enable_password when
+		# that is set. If empty, Password is sent with training too. Not needed if the
+		# controller's secure_ip lists mox's IP. (optional)
+		EnablePassword:
+
+		# Timeout for each request to rspamd, e.g. 30s. Default 16s: twice rspamd's
+		# default task_timeout (8s), after which rspamd finishes the message with what it
+		# has and answers. A check started before the 5 minute limit for the checks of a
+		# message runs until its timeout, so a large timeout can still delay the reply to
+		# the sender. (optional)
+		Timeout: 0s
+
+		# If set, a message rspamd judges as junk for an account without a mailbox with
+		# the Junk special-use role is delivered to the normal mailbox with the $Junk flag
+		# set, where the account's AutomaticJunkFlags apply, as for any delivery: with the
+		# default AutomaticJunkFlags, Inbox is neutral and the flag is cleared, so the
+		# verdict is only in the X-Mox-Reason header of the message. By default, the Junk
+		# mailbox is created, or an existing mailbox with its name gets the role.
+		# (optional)
+		NoJunkMailboxCreate: false
+
 # domains.conf
 
 	# NOTE: This config file is in 'sconf' format. Indent with tabs. Comments must be
@@ -1290,9 +1410,13 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 
 				# If enabled, junk/nonjunk flags will be set automatically if they match some of
 				# the regular expressions. When two of the three mailbox regular expressions are
-				# set, the remaining one will match all unmatched messages. Messages are matched
-				# in the order 'junk', 'neutral', 'not junk', and the search stops on the first
-				# match. Mailboxes are lowercased before matching.
+				# set, the remaining one will match all unmatched messages. When all three are
+				# set, a message added, moved or copied to a mailbox that matches none of them
+				# keeps its flags. Messages are matched in the order 'junk', 'neutral', 'not
+				# junk', and the search stops on the first match. Mailboxes are lowercased before
+				# matching. Whether enabled or not, a message added, moved or copied to the
+				# mailbox with the Junk special-use role gets the junk flag and loses the nonjunk
+				# flag.
 				Enabled: false
 
 				# Example: ^(junk|spam). (optional)

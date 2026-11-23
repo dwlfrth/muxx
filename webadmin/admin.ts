@@ -353,6 +353,33 @@ const index = async () => {
 	let recvID: HTMLInputElement
 	let cidElem: HTMLSpanElement
 
+	// Status of rspamd, if configured. Loaded after the page, so a slow or unreachable
+	// rspamd does not delay it.
+	const rspamdElem = dom.span()
+	;(async () => {
+		const s = await client.RspamdStatus()
+		if (!s.Configured) {
+			return
+		}
+		let status: ElemArg
+		if (s.Error) {
+			status = dom.span(style({color: red}), 'not reachable: ' + s.Error)
+		} else if (s.TooOld) {
+			status = dom.span(style({color: red}), 'version ' + s.Version + ', rspamd ' + s.MinVersion + ' or later is required')
+		} else {
+			status = 'version ' + (s.Version || 'unknown') + ', training queue ' + s.LearnQueue
+		}
+		// While a classifier has not learned enough messages, rspamd does not use it.
+		const training = (s.Bayes || []).filter((b: api.RspamdBayes) => b.Spam < b.MinLearns || b.Ham < b.MinLearns).map((b: api.RspamdBayes) => {
+			const count = (n: number) => n >= b.MinLearns ? 'ready' : n + ' of ' + b.MinLearns + ' (' + (b.MinLearns - n) + ' remaining)'
+			const name = b.Name === 'bayes' ? 'Bayes' : 'Bayes classifier ' + b.Name
+			return ' - ' + name + ' in training' + (b.PerUser ? ', all users' : '') + ': spam ' + count(b.Spam) + ', ham ' + count(b.Ham)
+		})
+		// On the same line as the status, e.g. "Rspamd (version 4.3.0, training queue 0) -
+		// Bayes in training: spam 13 of 200 (187 remaining), ham ready".
+		dom._kids(rspamdElem, link(s.URL, 'Rspamd'), ' (', status, ')', training.join(''), dom.br())
+	})()
+
 	return dom.div(
 		crumbs('Mox Admin'),
 		checkUpdatesEnabled ? [] : dom.p(box(yellow, 'Warning: Checking for updates has not been enabled in mox.conf (CheckUpdates: true).', dom.br(), 'Make sure you stay up to date through another mechanism!', dom.br(), 'You have a responsibility to keep the internet-connected software you run up to date and secure!', dom.br(), 'See ', link('https://updates.xmox.nl/changelog'))),
@@ -360,6 +387,7 @@ const index = async () => {
 			dom.a('Accounts', attr.href('#accounts')), dom.br(),
 			dom.a('Queue', attr.href('#queue')), ' ('+queueSize+')', dom.br(),
 			dom.a('Webhook queue', attr.href('#webhookqueue')), ' ('+hooksQueueSize+')', dom.br(),
+			rspamdElem,
 		),
 		dom.h2('Domains'),
 		(domains || []).length === 0 ? box(red, 'No domains') :
