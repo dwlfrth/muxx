@@ -864,7 +864,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 	# link to its web interface at URL, and, while a Bayes classifier of rspamd has
 	# learned fewer messages of a class than its min_learns, below which rspamd does
 	# not use it, how many it has learned (for all users together if it has per_user).
-	# Metrics are named mox_rspamd_*. (optional)
+	# Metrics are named mox_rspamd_* (muxx_rspamd_* in muxx builds). (optional)
 	Rspamd:
 
 		# Base URL of the rspamd controller, e.g. http://localhost:11334: checks use
