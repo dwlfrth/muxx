@@ -36,6 +36,8 @@ that run muxx lives in the private `dotfiles` repo.
   `.dockerignore`, `.github/workflows/muxx-image.yml`). Changes reach it only
   through a merge request on GitLab. GitHub shows `.github/README.md` on the
   repository page instead of upstream's `README.md`, which stays as it is.
+  Its links are absolute: the container package page on GitHub renders it too,
+  and resolves relative links to `…/tree/…` URLs that do not exist.
 - Each feature branches from **upstream's** `main`, not from ours, so it can
   become a pull request to mjl-/mox without carrying other features or the
   muxx-only files.
