@@ -386,7 +386,7 @@ func do(ctx context.Context, conf config.Rspamd, password, method, path string, 
 	for k, l := range hdr {
 		req.Header[k] = l
 	}
-	req.Header.Set("User-Agent", fmt.Sprintf("mox/%s (rspamd)", moxvar.Version))
+	req.Header.Set("User-Agent", moxvar.UserAgent()+" (rspamd)")
 	if password != "" {
 		req.Header.Set("Password", password)
 	}
