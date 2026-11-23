@@ -3009,7 +3009,7 @@ func (c *conn) deliver(ctx context.Context, recvHdrFor func(string) string, msgW
 		c.log.Info("deliver error",
 			slog.Any("rcptto", e.rcptTo),
 			slog.Int("code", code),
-			slog.String("secode", "secode"),
+			slog.String("secode", secode),
 			slog.Bool("usererror", userError),
 			slog.String("errmsg", errmsg))
 		deliverErrors = append(deliverErrors, e)
