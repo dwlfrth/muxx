@@ -31,6 +31,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"golang.org/x/text/unicode/norm"
 
@@ -627,6 +628,36 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 			addErrorf("host TLSRPT localpart %q is an internationalized address, only conventional ascii-only address allowed for interopability", tlsrptLocalpart)
 		}
 		c.HostTLSRPT.ParsedLocalpart = tlsrptLocalpart
+	}
+
+	if r := c.Rspamd; r != nil {
+		// Credentials or a query string in the URL could end up in logs and errors, so
+		// the password has its own field.
+		if u, err := url.Parse(r.URL); err != nil {
+			// Not the url.Error itself: it includes the url, which is not validated yet.
+			var uerr *url.Error
+			if errors.As(err, &uerr) {
+				err = uerr.Err
+			}
+			addErrorf("rspamd: parsing url: %v", err)
+		} else if u.Scheme != "http" && u.Scheme != "https" || u.Host == "" {
+			addErrorf("rspamd: url must be http or https with a host")
+		} else if u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(r.URL, "#") {
+			// Also an empty fragment: the path for a request is appended to the URL, and
+			// would end up in the fragment.
+			addErrorf("rspamd: url must not have credentials, query string or fragment, the password has its own field")
+		}
+		// Not quoted in errors, they are secret. Control characters can't be sent in a
+		// header.
+		if strings.ContainsFunc(r.Password, unicode.IsControl) {
+			addErrorf("rspamd: password must not contain control characters")
+		}
+		if strings.ContainsFunc(r.EnablePassword, unicode.IsControl) {
+			addErrorf("rspamd: enable password must not contain control characters")
+		}
+		if r.Timeout < 0 {
+			addErrorf("rspamd: timeout must not be negative")
+		}
 	}
 
 	// Return private key for host name for use with an ACME. Used to return the same

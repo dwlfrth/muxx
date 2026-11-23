@@ -13,6 +13,7 @@ import (
 	"github.com/mjl-/mox/mox-"
 	"github.com/mjl-/mox/mtastsdb"
 	"github.com/mjl-/mox/queue"
+	"github.com/mjl-/mox/rspamd"
 	"github.com/mjl-/mox/smtpserver"
 	"github.com/mjl-/mox/store"
 	"github.com/mjl-/mox/tlsrptdb"
@@ -54,6 +55,11 @@ func shutdown(log mlog.Log) {
 // start initializes all packages, starts all listeners and the switchboard
 // goroutine, then returns.
 func start(mtastsdbRefresher, sendDMARCReports, sendTLSReports, skipForkExec bool) error {
+	if mox.Conf.Static.Rspamd != nil {
+		// Only with rspamd configured, so the metrics don't appear otherwise.
+		rspamd.Register()
+	}
+
 	smtpserver.Listen()
 	imapserver.Listen()
 	http.Listen()

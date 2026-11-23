@@ -145,6 +145,7 @@ func (x XOps) MessageFlagsAdd(ctx context.Context, log mlog.Log, acc *store.Acco
 
 	acc.WithRLock(func() {
 		var changes []store.Change
+		var rspamdLearns []store.RspamdLearn
 
 		x.DBWrite(ctx, acc, func(tx *bstore.Tx) {
 			var modseq store.ModSeq
@@ -193,6 +194,9 @@ func (x XOps) MessageFlagsAdd(ctx context.Context, log mlog.Log, acc *store.Acco
 
 				changes = append(changes, m.ChangeFlags(oflags, mb))
 				retrain = append(retrain, m)
+				if l, ok := store.RspamdLearnFlags(m, oflags, m.Flags); ok {
+					rspamdLearns = append(rspamdLearns, l)
+				}
 			}
 
 			if mb.ID != 0 {
@@ -210,6 +214,7 @@ func (x XOps) MessageFlagsAdd(ctx context.Context, log mlog.Log, acc *store.Acco
 			err = acc.RetrainMessages(ctx, log, tx, retrain)
 			x.Checkf(ctx, err, "retraining messages")
 		})
+		acc.RspamdQueue(log, rspamdLearns)
 
 		store.BroadcastChanges(acc, changes)
 	})
@@ -222,6 +227,7 @@ func (x XOps) MessageFlagsClear(ctx context.Context, log mlog.Log, acc *store.Ac
 	acc.WithRLock(func() {
 		var retrain []store.Message
 		var changes []store.Change
+		var rspamdLearns []store.RspamdLearn
 
 		x.DBWrite(ctx, acc, func(tx *bstore.Tx) {
 			var modseq store.ModSeq
@@ -266,6 +272,9 @@ func (x XOps) MessageFlagsClear(ctx context.Context, log mlog.Log, acc *store.Ac
 
 				changes = append(changes, m.ChangeFlags(oflags, mb))
 				retrain = append(retrain, m)
+				if l, ok := store.RspamdLearnFlags(m, oflags, m.Flags); ok {
+					rspamdLearns = append(rspamdLearns, l)
+				}
 			}
 
 			if mb.ID != 0 {
@@ -281,6 +290,7 @@ func (x XOps) MessageFlagsClear(ctx context.Context, log mlog.Log, acc *store.Ac
 			err = acc.RetrainMessages(ctx, log, tx, retrain)
 			x.Checkf(ctx, err, "retraining messages")
 		})
+		acc.RspamdQueue(log, rspamdLearns)
 
 		store.BroadcastChanges(acc, changes)
 	})
@@ -349,6 +359,7 @@ func (x XOps) MailboxesMarkRead(ctx context.Context, log mlog.Log, acc *store.Ac
 func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account, messageIDs []int64, mailboxName string, mailboxID int64, markSeen bool) {
 	acc.WithWLock(func() {
 		var changes []store.Change
+		var rspamdLearns []store.RspamdLearn
 
 		var newIDs []int64
 		defer func() {
@@ -377,9 +388,10 @@ func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account,
 			}
 
 			var modseq store.ModSeq
-			newIDs, changes = x.MessageMoveTx(ctx, log, acc, tx, messageIDs, mbDst, &modseq, markSeen)
+			newIDs, changes, rspamdLearns = x.MessageMoveTx(ctx, log, acc, tx, messageIDs, mbDst, &modseq, markSeen)
 		})
 		newIDs = nil
+		acc.RspamdQueue(log, rspamdLearns)
 
 		store.BroadcastChanges(acc, changes)
 	})
@@ -392,8 +404,9 @@ func (x XOps) MessageMove(ctx context.Context, log mlog.Log, acc *store.Account,
 // MessageErase record so the message gets erased when all sessions stopped
 // referencing the message.
 //
-// If markSeen is true, the messages are marked as seen.
-func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, messageIDs []int64, mbDst store.Mailbox, modseq *store.ModSeq, markSeen bool) ([]int64, []store.Change) {
+// If markSeen is true, the messages are marked as seen. The caller queues the
+// returned rspamd training after committing.
+func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Account, tx *bstore.Tx, messageIDs []int64, mbDst store.Mailbox, modseq *store.ModSeq, markSeen bool) ([]int64, []store.Change, []store.RspamdLearn) {
 	var newIDs []int64
 	var commit bool
 	defer func() {
@@ -410,6 +423,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 
 	// n adds, 1 remove, 2 mailboxcounts, 1 mailboxkeywords, optimistic that messages are in a single source mailbox.
 	changes := make([]store.Change, 0, len(messageIDs)+4)
+	var rspamdLearns []store.RspamdLearn
 
 	var err error
 	if *modseq == 0 {
@@ -493,10 +507,14 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 			nm.Seen = true
 		}
 
-		nm.JunkFlagsForMailboxMove(mbSrc, mbDst, accConf)
+		oflags := nm.Flags
+		nm.RspamdJunkFlagsForMailboxMove(mbSrc, mbDst, accConf)
 
 		err = tx.Update(&nm)
 		x.Checkf(ctx, err, "updating message with new mailbox")
+		if l, ok := store.RspamdLearnFlags(nm, oflags, nm.Flags); ok {
+			rspamdLearns = append(rspamdLearns, l)
+		}
 
 		mbDst.Add(nm.MailboxCounts())
 
@@ -563,7 +581,7 @@ func (x XOps) MessageMoveTx(ctx context.Context, log mlog.Log, acc *store.Accoun
 	}
 
 	commit = true
-	return newIDs, changes
+	return newIDs, changes, rspamdLearns
 }
 
 func isText(p message.Part) bool {

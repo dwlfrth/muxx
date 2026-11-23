@@ -46,6 +46,7 @@ type delivery struct {
 	dkimResults      []dkim.Result
 	iprevStatus      iprev.Status
 	smtputf8         bool
+	rspamdCheck      rspamdCheckFunc // Nil without rspamd configured.
 }
 
 type analysis struct {
@@ -374,6 +375,20 @@ func analyze(ctx context.Context, log mlog.Log, resolver dns.Resolver, d deliver
 		}
 		addReasonText("message does not pass required aligned spf and/or dkim check required for destination")
 		return reject(code, smtp.SePol7MultiAuthFails26, msg, nil, reasonMsgAuthRequired)
+	}
+
+	// With rspamd configured, a message is accepted if the account has sent to its
+	// DMARC-validated From address or it has a valid subjectpass token, and otherwise
+	// judged by rspamd, instead of the checks below. Messages to DMARC and TLS
+	// reporting addresses are processed without rspamd. If rspamd cannot be used, the
+	// checks below decide.
+	if d.rspamdCheck != nil && !d.destination.DMARCReports && !d.destination.HostTLSReports && !d.destination.DomainTLSReports {
+		if a, ok := rspamdAnalyze(ctx, log, d, mailbox, addReasonText, reject); ok {
+			a.reasonText = reasonText
+			a.dmarcOverrideReason = dmarcOverrideReason
+			a.headers = headers
+			return a
+		}
 	}
 
 	// Determine if message is acceptable based on DMARC domain, DKIM identities, or

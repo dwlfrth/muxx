@@ -10,10 +10,12 @@ import (
 	"runtime/debug"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/mjl-/bstore"
 	"github.com/mjl-/sherpa"
 
+	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
 	"github.com/mjl-/mox/mlog"
 	"github.com/mjl-/mox/mox-"
@@ -377,6 +379,17 @@ func TestAPI(t *testing.T) {
 	})
 	// todo: check delivery of 6 messages to inbox, 1 to sent
 
+	// Replying and forwarding set $NotJunk on the original if it had neither junk
+	// flag, which trains the junk filter, and rspamd if configured: once.
+	learned := make(chan string, 10)
+	rspamdSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		learned <- r.URL.Path
+		w.Write([]byte(`{"success":true}`))
+	}))
+	defer rspamdSrv.Close()
+	mox.Conf.Static.Rspamd = &config.Rspamd{URL: rspamdSrv.URL}
+	defer func() { mox.Conf.Static.Rspamd = nil }()
+
 	// Reply with attachments.
 	api.MessageSubmit(ctx, SubmitMessage{
 		From:     "mjl@mox.example",
@@ -417,6 +430,21 @@ func TestAPI(t *testing.T) {
 		ResponseMessageID: testbox1Alt.ID,
 	})
 	// todo: check forwarded flag, check it has the right attachments.
+
+	select {
+	case p := <-learned:
+		if p != "/learnham" {
+			t.Fatalf("rspamd learned %s, expected /learnham", p)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("rspamd learned nothing for reply")
+	}
+	select {
+	case p := <-learned:
+		t.Fatalf("rspamd learned %s again", p)
+	case <-time.After(100 * time.Millisecond):
+	}
+	mox.Conf.Static.Rspamd = nil
 
 	// Send from utf8 localpart.
 	api.MessageSubmit(ctx, SubmitMessage{
