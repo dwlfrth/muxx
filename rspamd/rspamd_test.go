@@ -111,6 +111,18 @@ func TestCheck(t *testing.T) {
 	if exp := "mox/" + moxvar.Version + " (rspamd)"; gotUserAgent != exp {
 		t.Fatalf("user-agent %q, expected %q", gotUserAgent, exp)
 	}
+	// A muxx build names muxx and its release, as mox's other HTTP clients do.
+	func() {
+		orig := moxvar.Distribution
+		defer func() { moxvar.Distribution = orig }()
+		moxvar.Distribution = "muxx-202611191730"
+		if _, err := Check(context.Background(), conf, req, strings.NewReader(testMsg)); err != nil {
+			t.Fatalf("check: %v", err)
+		}
+		if exp := moxvar.UserAgent() + " (rspamd)"; gotUserAgent != exp || !strings.HasPrefix(gotUserAgent, "muxx/") {
+			t.Fatalf("user-agent %q, expected %q", gotUserAgent, exp)
+		}
+	}()
 	exp := map[string]any{"ip": "192.0.2.1", "helo": "mail.example.org", "from": "", "rcpt": []any{"mjl@mox.example"}, "queue_id": "abc", "deliver_to": "mjl@mox.example"}
 	if fmt.Sprint(gotMeta) != fmt.Sprint(exp) {
 		t.Fatalf("metadata %v, expected %v", gotMeta, exp)
