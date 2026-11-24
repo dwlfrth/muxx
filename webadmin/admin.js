@@ -1847,9 +1847,9 @@
 			const training = (s.Bayes || []).filter((b) => b.Spam < b.MinLearns || b.Ham < b.MinLearns).map((b) => {
 				const count = /* @__PURE__ */ __name((n) => n >= b.MinLearns ? "ready" : n + " of " + b.MinLearns + " (" + (b.MinLearns - n) + " remaining)", "count");
 				const name = b.Name === "bayes" ? "Bayes" : "Bayes classifier " + b.Name;
-				return " - " + name + " in training" + (b.PerUser ? ", all users" : "") + ": spam " + count(b.Spam) + ", ham " + count(b.Ham);
+				return [" - ", box(yellow, name + " in training" + (b.PerUser ? ", all users" : "") + ": spam " + count(b.Spam) + ", ham " + count(b.Ham))];
 			});
-			dom._kids(rspamdElem, link(s.URL, "Rspamd"), " (", status, ")", training.join(""), dom.br());
+			dom._kids(rspamdElem, link(s.URL, "Rspamd"), " (", status, ")", training, dom.br());
 		})();
 		return dom.div(
 			crumbs("Mox Admin"),

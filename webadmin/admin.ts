@@ -373,11 +373,12 @@ const index = async () => {
 		const training = (s.Bayes || []).filter((b: api.RspamdBayes) => b.Spam < b.MinLearns || b.Ham < b.MinLearns).map((b: api.RspamdBayes) => {
 			const count = (n: number) => n >= b.MinLearns ? 'ready' : n + ' of ' + b.MinLearns + ' (' + (b.MinLearns - n) + ' remaining)'
 			const name = b.Name === 'bayes' ? 'Bayes' : 'Bayes classifier ' + b.Name
-			return ' - ' + name + ' in training' + (b.PerUser ? ', all users' : '') + ': spam ' + count(b.Spam) + ', ham ' + count(b.Ham)
+			return [' - ', box(yellow, name + ' in training' + (b.PerUser ? ', all users' : '') + ': spam ' + count(b.Spam) + ', ham ' + count(b.Ham))]
 		})
 		// On the same line as the status, e.g. "Rspamd (version 4.3.0, training queue 0) -
-		// Bayes in training: spam 13 of 200 (187 remaining), ham ready".
-		dom._kids(rspamdElem, link(s.URL, 'Rspamd'), ' (', status, ')', training.join(''), dom.br())
+		// Bayes in training: spam 13 of 200 (187 remaining), ham ready", the training
+		// part highlighted like the page's other warnings.
+		dom._kids(rspamdElem, link(s.URL, 'Rspamd'), ' (', status, ')', training, dom.br())
 	})()
 
 	return dom.div(
