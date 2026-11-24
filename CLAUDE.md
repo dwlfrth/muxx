@@ -32,8 +32,9 @@ that run muxx lives in the private `dotfiles` repo.
 ## Branches
 
 - `main` is upstream plus the files only this copy has (`CLAUDE.md`,
-  `MUXX.md`, `.github/README.md`, `.gitlab-ci.yml`, `Dockerfile.muxx` and its
-  `.dockerignore`, `.github/workflows/muxx-image.yml`). Changes reach it only
+  `MUXX.md`, `.github/README.md`, `LICENSE.muxx`, `.gitlab-ci.yml`,
+  `Dockerfile.muxx` and its `.dockerignore`,
+  `.github/workflows/muxx-image.yml`). Changes reach it only
   through a merge request on GitLab. GitHub shows `.github/README.md` on the
   repository page instead of upstream's `README.md`, which stays as it is.
   Its links are absolute: the container package page on GitHub renders it too,

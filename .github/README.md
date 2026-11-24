@@ -8,3 +8,7 @@ unless configured: without configuration, muxx behaves exactly like mox.
   [MUXX.md](https://github.com/dwlfrth/muxx/blob/main/MUXX.md)
 - Everything else, from installation to configuration, is mox's:
   [README.md](https://github.com/dwlfrth/muxx/blob/main/README.md)
+- License: mox is MIT
+  ([LICENSE.MIT](https://github.com/dwlfrth/muxx/blob/main/LICENSE.MIT)), and
+  muxx's changes are under the same license
+  ([LICENSE.muxx](https://github.com/dwlfrth/muxx/blob/main/LICENSE.muxx))

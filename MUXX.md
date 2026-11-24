@@ -94,4 +94,9 @@ Developed in a private repository and published at
 
 Like mox, available under the MIT license ([LICENSE.MIT](LICENSE.MIT)), with
 the Public Suffix List under the Mozilla Public License 2.0
-([LICENSE.MPLv2.0](LICENSE.MPLv2.0)).
+([LICENSE.MPLv2.0](LICENSE.MPLv2.0)). muxx's changes to mox are under the same
+MIT license ([LICENSE.muxx](LICENSE.muxx)). This applies to all muxx
+releases and images, including those published before `LICENSE.muxx` was
+added. The `licenses` link in the web interfaces lists mox's and its
+dependencies' licenses, as in mox; it does not include `LICENSE.muxx`, so
+muxx changes nothing in upstream's code for it.
