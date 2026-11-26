@@ -66,6 +66,13 @@ commit, which arrives through the mirror: `git ls-remote
 git@github.com:dwlfrth/muxx.git main` must show it. The image workflow refuses
 a tag whose commit is not on `main`.
 
+A feature's MR adds its row to the Features table in `MUXX.md`, linking
+[latest](https://github.com/dwlfrth/muxx/releases/latest): the release name
+is only chosen at tag time, after the merge. The same MR rewrites each older
+row still linking `latest` to the release that now has it (tag notes, `git
+tag --contains`), so only the newest feature's row moves with the next release.
+Between a merge and its tag, `latest` is the release before, without it.
+
 CI gives each release a page on GitLab's and GitHub's Releases with each
 platform's own feature: the tag as title, its message as notes (the `release`
 job's `release:` keyword; `gh release create --notes-from-tag` in the image
