@@ -4,9 +4,10 @@ muxx can use an [rspamd](https://rspamd.com) server to judge incoming mail and
 trains it with what users mark as junk or not junk. This document explains how
 the integration behaves, how to configure both sides, and why it was built the
 way it is. The configuration reference itself is the `Rspamd` section of
-`mox.conf` (see `config/doc.go`); this document does not replace it.
+`muxx.conf` (`mox.conf` for plain mox; see `config/doc.go`); this document does
+not replace it.
 
-Without an `Rspamd` section in `mox.conf`, nothing changes: muxx behaves
+Without an `Rspamd` section in `muxx.conf`, nothing changes: muxx behaves
 exactly like mox, and none of the code below runs.
 
 Requires rspamd 4.1.1 or later.
@@ -17,6 +18,7 @@ Requires rspamd 4.1.1 or later.
 - [How a delivery is decided](#how-a-delivery-is-decided)
 - [Training](#training)
 - [Configuration](#configuration)
+  - [Checks without password](#checks-without-password)
 - [Compared with rspamd's usual deployment](#compared-with-rspamds-usual-deployment)
 - [Observing it](#observing-it)
 - [Design decisions](#design-decisions)
@@ -87,7 +89,9 @@ Special cases:
 
 ### What rspamd receives
 
-Each check is a `POST /checkv3` with:
+Each check is a `POST /checkv3` to rspamd's normal worker (`CheckURL`), without
+password, or, without `CheckURL`, to the controller, with `Password` if set (see
+[Checks without password](#checks-without-password)). It carries:
 
 - the connecting IP, the EHLO name (or address literal such as `[192.0.2.1]`),
   the verified reverse DNS name, the SMTP `MAIL FROM` and the one recipient;
@@ -203,19 +207,21 @@ ham.
 
 ### muxx
 
-In `mox.conf`:
+In `muxx.conf`:
 
 ```
 Rspamd:
-	URL: http://localhost:11334
+	ControllerURL: http://localhost:11334
+	CheckURL: http://localhost:11333
 	Password: read-only-password
 	EnablePassword: enable-password
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
-| `URL` | required | Base URL of rspamd's controller. Checks and training both go to the controller. http or https, without credentials, query string or fragment. Also linked from the admin page as rspamd's web interface, so it should be reachable from the admin's browser for that link to work. |
-| `Password` | empty | The controller's `password`, sent with checks and status requests. |
+| `ControllerURL` | required | Base URL of rspamd's controller, for training, status and, without `CheckURL`, checks. http or https, without credentials, query string or fragment. Also linked from the admin page as rspamd's web interface, so it should be reachable from the admin's browser for that link to work. Named `URL` before 2026-11-25: a configuration with `URL` is refused until it is renamed. |
+| `CheckURL` | empty | Base URL of rspamd's normal worker, for checks, sent without password. Needed with a `Password`, see below. Same rules as `ControllerURL`. |
+| `Password` | empty | The controller's `password`, sent with status requests, and with checks only without `CheckURL`. |
 | `EnablePassword` | `Password` | The controller's `enable_password`, sent with training. rspamd only accepts training with `enable_password` when that is set. |
 | `Timeout` | 16s | Per request. Twice rspamd's default `task_timeout` of 8s, after which rspamd finishes with what it has and still answers. |
 | `NoJunkMailboxCreate` | off | Do not create a Junk mailbox for junk verdicts; see above. |
@@ -230,13 +236,45 @@ rspamd is not reached directly. Requests to loopback addresses never use a
 proxy. A proxy sees the `Password` header and the messages unless the URL is
 https.
 
+### Checks without password
+
+rspamd treats any request with a `Password` header as a manual test, as from
+`rspamc` or its web interface, and not as mail (`is_rspamc_or_controller` in
+rspamd's `lua_util.lua`). It does so on every worker. Several of its modules then
+skip the message:
+
+| Module | With a `Password` header | Shipped default | rspamd setting to act anyway |
+|---|---|---|---|
+| greylist | never stores a record, so a retry is never let through: the score alone gives "greylist", muxx refuses with 450 until the sender gives up | on, with Redis | `check_local` |
+| ratelimit | not applied | on, no limits configured | `allow_local` |
+| neural | does not collect training data | on, with Redis | `allow_local` |
+| reputation | not applied | off | none |
+| clustering, clickhouse, elastic | not applied | off | `allow_local` |
+| dmarc (reports) | stores no report data | off | `report_local_controller` |
+
+The controller needs a password, or `secure_ip`, for every request, checks
+included. So with a `Password`, set `CheckURL` to rspamd's normal worker
+(port 11333 by default), which needs none: checks then go there without
+password, and the controller keeps its password for training and status.
+Without a `Password`, with
+the controller's `secure_ip` listing muxx's IP, checks can stay on the
+controller.
+
+Without `CheckURL` and with a `Password`, muxx logs a warning at startup and the
+admin page shows one next to rspamd's status.
+
+rspamd's proxy worker is no alternative as shipped: it speaks milter, and
+answers an HTTP request with "HTTP POST request is not supported in milter
+mode".
+
 ### rspamd
 
 The integration works with rspamd's shipped defaults. Points worth knowing:
 
 - **Access.** The controller has two passwords: `password` for read-only
-  commands such as checks, `enable_password` for privileged ones such as
-  training. Alternatively, `secure_ip` grants full access without a password
+  commands such as checks and status, `enable_password` for privileged ones such
+  as training. The normal worker has none: limit who can reach it, e.g. with its
+  `bind_socket` or a firewall. Alternatively, `secure_ip` grants full access without a password
   to listed addresses. Keep `secure_ip` to what needs it: an address that
   later belongs to another host gets the same access. `secure_ip` encrypts
   nothing. See rspamd's
@@ -270,9 +308,9 @@ The integration works with rspamd's shipped defaults. Points worth knowing:
   DNSBLs) for IPs in its `local_addrs`, private ranges by default. If muxx sees
   incoming mail from private addresses, e.g. behind a proxy, configure
   `external_relay` or `local_addrs` accordingly.
-- **Version.** The controller serves `/checkv3` since rspamd 4.1.1. With an
-  older one, checks fall back to mox's own, and the log and admin page say
-  "rspamd 4.1.1 or later is required".
+- **Version.** rspamd 4.1.1 or later: the controller serves `/checkv3` since
+  then. With an older one, checks fall back to mox's own, and the admin page
+  shows "rspamd 4.1.1 or later is required".
 
 ### Example rspamd configuration
 
@@ -280,7 +318,7 @@ A working set of files, as used with muxx in production, with placeholders for
 the secrets and host names. They go in rspamd's `local.d` directory
 (`/etc/rspamd/local.d` in rspamd's container image); everything else stays at
 rspamd's defaults. Keep them readable for rspamd only, e.g. owner root, group
-rspamd, mode 0640.
+`_rspamd` (gid 11333 in rspamd's container image), mode 0640.
 
 `worker-controller.inc`: two different passwords, stored hashed, and
 password-less access only from the machine itself.
@@ -303,6 +341,10 @@ workers that accept messages:
 ```
 allow_file_and_shm_inputs = false;
 ```
+
+The normal worker, which receives muxx's checks at `CheckURL`, listens on
+`*:11333` in rspamd's container image, without password: keep that port on a
+network only muxx reaches, or set its `bind_socket`.
 
 `redis.conf`, for greylisting, rate limits and Bayes:
 
@@ -364,7 +406,13 @@ refusals.
   `Rspamd (version 4.3.0, training queue 0) - Bayes in training: spam 13 of 200
   (187 remaining), ham ready`. The Bayes part shows only while a class is below
   `min_learns`, and says "all users" when the classifier is per user. An
-  unreachable or too old rspamd is shown in red.
+  unreachable or too old rspamd is shown in red. With a `Password` and no
+  `CheckURL`, a warning in red below that line says that rspamd treats
+  checks as manual tests. With `CheckURL`, the admin page also asks rspamd's
+  `/ping` there, and shows in red if it does not answer: checks then fail and
+  mox's own checks decide, while the controller can still look fine. `/ping`
+  does not tell which worker answers, so a `CheckURL` pointing at the
+  controller is not caught; its checks fail with "Unauthorized" in the log.
 - **Metrics,** registered only with rspamd configured (named `muxx_rspamd_*` in
   muxx builds):
   - `mox_rspamd_check_total{result}`: the action applied, `fallback`, or
@@ -388,8 +436,15 @@ served only as a source of lessons, never as a reason to keep something.
 - **`/checkv3`.** Its multipart form streams the message and the SMTP details
   together, and its answer is read as rspamd sends it (multipart, verdict in
   the `result` part). The controller serves it since 4.1.1, hence the minimum
-  version; a 404 means too old. Training stays on `/learnspam` and
-  `/learnham`, as rspamd has no newer learning endpoint.
+  version, also with `CheckURL`. Training stays
+  on `/learnspam` and `/learnham`, as rspamd has no newer learning endpoint.
+- **Checks on the normal worker, training on the controller.** Checks were
+  first all sent to the controller, so one URL served everything. That was
+  weighed against rspamd's documentation, which lists `/checkv3` only for the
+  normal worker and the proxy, but not against what a `Password` header does to
+  rspamd's modules (see [What testing changed](#what-testing-changed)). The
+  controller keeps training, status and the web interface, behind its
+  passwords; `URL` was renamed `ControllerURL` once there were two.
 - **Rules first and last, filters replaced.** The account's configured rules
   (rulesets, DMARC policy, subjectpass, Introbox) are respected; mox's own
   filters are replaced by rspamd, so there is never a double verdict.
@@ -422,7 +477,8 @@ served only as a source of lessons, never as a reason to keep something.
   the redirect target). The URL may appear in errors, so it may not hold
   credentials, a query or a fragment; the passwords have their own fields and
   are never logged. Passwords with control characters are refused, as they
-  cannot be sent in a header.
+  cannot be sent in a header, and so are passwords that start or end with a
+  space, which HTTP removes from a header value.
 - **Identification.** Requests carry a `User-Agent` naming muxx and its
   version, with `(rspamd)`, as mox's other HTTP clients do.
 
@@ -448,6 +504,17 @@ served only as a source of lessons, never as a reason to keep something.
 - **`EnablePassword`.** Training failed with 401 against an rspamd with both
   passwords set: rspamd only accepts training with `enable_password`. Measured
   as well: `enable_password` is also accepted for read-only commands.
+- **Checks with a password.** Checks were sent to the controller with
+  `Password`. On 2026-11-25 a newsletter was refused with 450 for over 21
+  hours: rspamd scored it in the greylist range on every retry, but its
+  greylist module had never stored a record (no `GREYLIST` symbol; no greylist
+  keys in Redis), so no retry could pass. Measured on rspamd 4.3.0 with Redis,
+  sending the same message as muxx: with a `Password` header, greylisting,
+  rate limits and the neural network skip the check on the controller, the
+  normal worker and the proxy alike; without it, on any of them, the first
+  attempt is greylisted and the retry passes. The worker makes no other
+  difference: rspamd processes a check on the controller like on the normal
+  worker (both are scanners), except for its log pipe. Hence `CheckURL`.
 - **GTUBE.** rspamd answers the GTUBE test pattern as "skipped" with a
   `reject` action. "Skipped" alone is therefore not "no verdict".
 - **Training messages.** Go's HTTP client closes a request body; mox's message
@@ -475,7 +542,8 @@ served only as a source of lessons, never as a reason to keep something.
 - Before each commit: build, `go vet` (also for 386), `gofmt`, `ineffassign`,
   `staticcheck`, `govulncheck`, the full test suite and the race detector.
 - Live tests against real rspamd (4.1.0 for "too old", 4.3.0, with and without
-  Redis): every action, GTUBE, greylisting and the retry, oversized messages,
+  Redis): every action, GTUBE, greylisting and the retry (with and without a
+  `Password` header, on the controller, normal worker and proxy), oversized messages,
   rspamd down, Junk mailbox creation and role restore, per-user keys, training
   with each result, the admin line, and moves in a real mail client training
   both muxx and rspamd.

@@ -2,8 +2,9 @@
 // checking incoming messages and training rspamd with messages users mark as
 // (non)junk.
 //
-// Checks use the /checkv3 endpoint (rspamd 4.1.1 or later on the controller),
-// training uses /learnspam and /learnham. See
+// Checks use the /checkv3 endpoint (rspamd 4.1.1 or later), on the normal worker
+// if CheckURL is set, else on the controller. Training uses /learnspam and
+// /learnham on the controller. See
 // https://docs.rspamd.com/developers/protocol.
 package rspamd
 
@@ -135,8 +136,11 @@ func httpClient() *http.Client {
 	return client
 }
 
-// Check sends msg to rspamd's /checkv3 endpoint and returns its verdict. If rspamd
-// does not serve /checkv3, ErrTooOld is returned.
+// Check sends msg to rspamd's /checkv3 endpoint and returns its verdict. With
+// CheckURL, the check goes to the normal worker without password: rspamd treats a
+// request with a Password header as a manual test and skips modules such as
+// greylisting for it. Without CheckURL, it goes to the controller with Password,
+// if set. If rspamd does not serve /checkv3, ErrTooOld is returned.
 func Check(ctx context.Context, conf config.Rspamd, req Request, msg io.Reader) (Result, error) {
 	start := time.Now()
 	defer func() {
@@ -190,7 +194,11 @@ func Check(ctx context.Context, conf config.Rspamd, req Request, msg io.Reader) 
 	defer pr.Close() // Stops the writer if the request ends early.
 
 	hdr := http.Header{"Content-Type": []string{mw.FormDataContentType()}}
-	resp, err := do(ctx, conf, conf.Password, http.MethodPost, "/checkv3", hdr, pr)
+	baseURL, password := conf.ControllerURL, conf.Password
+	if conf.CheckURL != "" {
+		baseURL, password = conf.CheckURL, ""
+	}
+	resp, err := do(ctx, conf, baseURL, password, http.MethodPost, "/checkv3", hdr, pr)
 	if err != nil {
 		return Result{}, err
 	}
@@ -253,7 +261,7 @@ func Learn(ctx context.Context, conf config.Rspamd, spam bool, deliverTo string,
 	if password == "" {
 		password = conf.Password
 	}
-	resp, err := do(ctx, conf, password, http.MethodPost, path, hdr, msg)
+	resp, err := do(ctx, conf, conf.ControllerURL, password, http.MethodPost, path, hdr, msg)
 	if err != nil {
 		return err
 	}
@@ -303,7 +311,7 @@ type Bayes struct {
 // its classifier; a statfile is spam or ham by its "class", or, without it, by its
 // symbol ending in SPAM or HAM, as in rspamd's default BAYES_SPAM and BAYES_HAM.
 func GetStat(ctx context.Context, conf config.Rspamd) (Stat, error) {
-	resp, err := do(ctx, conf, conf.Password, http.MethodGet, "/stat", nil, nil)
+	resp, err := do(ctx, conf, conf.ControllerURL, conf.Password, http.MethodGet, "/stat", nil, nil)
 	if err != nil {
 		return Stat{}, err
 	}
@@ -350,6 +358,28 @@ func GetStat(ctx context.Context, conf config.Rspamd) (Stat, error) {
 	return st, nil
 }
 
+// Ping checks that rspamd answers at baseURL, e.g. CheckURL, with "pong" on
+// /ping, which rspamd's workers serve without password. It does not tell which
+// worker answers: the controller answers too.
+func Ping(ctx context.Context, conf config.Rspamd, baseURL string) error {
+	resp, err := do(ctx, conf, baseURL, "", http.MethodGet, "/ping", nil, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return responseError(resp)
+	}
+	buf, err := io.ReadAll(io.LimitReader(resp.Body, 64))
+	if err != nil {
+		return fmt.Errorf("rspamd: reading ping response: %v", err)
+	}
+	if strings.TrimSpace(string(buf)) != "pong" {
+		return errors.New("rspamd: unexpected ping response")
+	}
+	return nil
+}
+
 // TooOld returns whether version is older than MinVersion.
 func TooOld(version string) bool {
 	parse := func(s string) (v [3]int) {
@@ -367,18 +397,19 @@ func TooOld(version string) bool {
 	return false
 }
 
-// do sends a request to rspamd, with the configured timeout and password, if
-// not empty. A redirect is returned as an error. The URL may appear in errors:
+// do sends a request to baseURL, the controller's or the normal worker's, with
+// the configured timeout and password, if not empty. A redirect is returned as
+// an error. The URL may appear in errors:
 // the configuration check refuses URLs with credentials, a query string or a
 // fragment.
-func do(ctx context.Context, conf config.Rspamd, password, method, path string, hdr http.Header, body io.Reader) (*http.Response, error) {
+func do(ctx context.Context, conf config.Rspamd, baseURL, password, method, path string, hdr http.Header, body io.Reader) (*http.Response, error) {
 	timeout := conf.Timeout
 	if timeout == 0 {
 		timeout = DefaultTimeout
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 
-	req, err := http.NewRequestWithContext(ctx, method, strings.TrimSuffix(conf.URL, "/")+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimSuffix(baseURL, "/")+path, body)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("rspamd: new request: %v", err)

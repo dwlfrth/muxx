@@ -86,7 +86,7 @@ func TestCheck(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	conf := config.Rspamd{URL: srv.URL + "/", Password: "secret"}
+	conf := config.Rspamd{ControllerURL: srv.URL + "/", Password: "secret"}
 	req := Request{
 		IP:        net.ParseIP("192.0.2.1"),
 		Helo:      "mail.example.org",
@@ -154,7 +154,7 @@ func TestCheckErrors(t *testing.T) {
 		w.Write([]byte(body))
 	}))
 	defer srv.Close()
-	conf := config.Rspamd{URL: srv.URL}
+	conf := config.Rspamd{ControllerURL: srv.URL}
 	req := Request{IP: net.ParseIP("192.0.2.1")}
 
 	check := func(s int, ct, b string, expErr error, expText string) {
@@ -187,7 +187,7 @@ func TestRedirectRefused(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	conf := config.Rspamd{URL: srv.URL, Password: "secret"}
+	conf := config.Rspamd{ControllerURL: srv.URL, Password: "secret"}
 	_, err := Check(context.Background(), conf, Request{IP: net.ParseIP("192.0.2.1")}, strings.NewReader(testMsg))
 	if err == nil || !strings.Contains(err.Error(), "refusing redirect") {
 		t.Fatalf("got %v, expected redirect refused", err)
@@ -207,7 +207,7 @@ func TestTLSCertPool(t *testing.T) {
 		w.Write([]byte(`{"version":"4.3.0"}`))
 	}))
 	defer srv.Close()
-	conf := config.Rspamd{URL: srv.URL}
+	conf := config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.TLS.CertPool = nil }()
 
 	// Not trusted by the system's certificate authorities.
@@ -249,9 +249,90 @@ func TestPasswords(t *testing.T) {
 			t.Fatalf("passwords sent %v, expected %v", got, exp)
 		}
 	}
-	check(config.Rspamd{URL: srv.URL, Password: "readonly", EnablePassword: "enable"}, "readonly", "enable")
-	check(config.Rspamd{URL: srv.URL, Password: "both"}, "both", "both")
-	check(config.Rspamd{URL: srv.URL}, "", "")
+	check(config.Rspamd{ControllerURL: srv.URL, Password: "readonly", EnablePassword: "enable"}, "readonly", "enable")
+	check(config.Rspamd{ControllerURL: srv.URL, Password: "both"}, "both", "both")
+	check(config.Rspamd{ControllerURL: srv.URL}, "", "")
+}
+
+// Ping checks that rspamd answers "pong" on /ping, without password.
+func TestPing(t *testing.T) {
+	var status int
+	var body, gotPassword string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPassword = r.Header.Get("Password")
+		if r.URL.Path != "/ping" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(status)
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	conf := config.Rspamd{ControllerURL: srv.URL, CheckURL: srv.URL + "/", Password: "secret"}
+
+	status, body = http.StatusOK, "pong\r\n"
+	if err := Ping(context.Background(), conf, conf.CheckURL); err != nil || gotPassword != "" {
+		t.Fatalf("ping: %v, password %q", err, gotPassword)
+	}
+	status, body = http.StatusOK, "not rspamd"
+	if err := Ping(context.Background(), conf, conf.CheckURL); err == nil {
+		t.Fatalf("ping with other answer succeeded")
+	}
+	status, body = http.StatusInternalServerError, ""
+	if err := Ping(context.Background(), conf, conf.CheckURL); err == nil || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("ping with error status: %v", err)
+	}
+	srv.Close()
+	if err := Ping(context.Background(), conf, conf.CheckURL); err == nil {
+		t.Fatalf("ping to closed server succeeded")
+	}
+}
+
+// With CheckURL, checks go to the normal worker without a Password header: rspamd
+// treats a request with one as a manual test and skips modules such as greylisting
+// for it. Training and status stay on the controller, with the passwords.
+func TestCheckURL(t *testing.T) {
+	var mu sync.Mutex
+	got := map[string]string{} // "server path" to the Password header, "-" if absent.
+	server := func(name string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			io.Copy(io.Discard, r.Body)
+			pw := "-"
+			if v, ok := r.Header["Password"]; ok {
+				pw = strings.Join(v, ",")
+			}
+			mu.Lock()
+			got[name+" "+r.URL.Path] = pw
+			mu.Unlock()
+			if r.URL.Path == "/checkv3" {
+				writeV3Result(w, `{"action":"no action"}`, false)
+				return
+			}
+			http.Error(w, "test", http.StatusInternalServerError)
+		}))
+	}
+	controller := server("controller")
+	defer controller.Close()
+	worker := server("worker")
+	defer worker.Close()
+
+	conf := config.Rspamd{ControllerURL: controller.URL, CheckURL: worker.URL + "/", Password: "readonly", EnablePassword: "enable"}
+	if _, err := Check(context.Background(), conf, Request{IP: net.ParseIP("192.0.2.1")}, strings.NewReader(testMsg)); err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	GetStat(context.Background(), conf)
+	Learn(context.Background(), conf, true, "", strings.NewReader(testMsg))
+	Learn(context.Background(), conf, false, "", strings.NewReader(testMsg))
+	exp := map[string]string{
+		"worker /checkv3":       "-",
+		"controller /stat":      "readonly",
+		"controller /learnspam": "enable",
+		"controller /learnham":  "enable",
+	}
+	if !maps.Equal(got, exp) {
+		t.Fatalf("requests with password %v, expected %v", got, exp)
+	}
+
 }
 
 func TestTimeout(t *testing.T) {
@@ -259,7 +340,7 @@ func TestTimeout(t *testing.T) {
 		time.Sleep(time.Second)
 	}))
 	defer srv.Close()
-	conf := config.Rspamd{URL: srv.URL, Timeout: 50 * time.Millisecond}
+	conf := config.Rspamd{ControllerURL: srv.URL, Timeout: 50 * time.Millisecond}
 	t0 := time.Now()
 	_, err := Check(context.Background(), conf, Request{IP: net.ParseIP("192.0.2.1")}, strings.NewReader(testMsg))
 	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
@@ -281,7 +362,7 @@ func TestLearn(t *testing.T) {
 		w.Write([]byte(body))
 	}))
 	defer srv.Close()
-	conf := config.Rspamd{URL: srv.URL}
+	conf := config.Rspamd{ControllerURL: srv.URL}
 
 	learn := func(spam bool, s int, b string, expErr error, expPath string) {
 		t.Helper()
@@ -326,7 +407,7 @@ func TestStat(t *testing.T) {
 		w.Write([]byte(stat))
 	}))
 	defer srv.Close()
-	st, err := GetStat(context.Background(), config.Rspamd{URL: srv.URL})
+	st, err := GetStat(context.Background(), config.Rspamd{ControllerURL: srv.URL})
 	exp := Stat{Version: "4.3.0", Bayes: []Bayes{
 		{Name: "bayes", MinLearns: 200, Spam: 12, Ham: 548},
 		{Name: "old", PerUser: true, MinLearns: 10, Spam: 3, Ham: 4},
@@ -337,7 +418,7 @@ func TestStat(t *testing.T) {
 
 	// Without statistics, as from rspamd without a classifier: only the version.
 	stat = `{"version":"4.3.0"}`
-	if st, err := GetStat(context.Background(), config.Rspamd{URL: srv.URL}); err != nil || st.Version != "4.3.0" || st.Bayes != nil {
+	if st, err := GetStat(context.Background(), config.Rspamd{ControllerURL: srv.URL}); err != nil || st.Version != "4.3.0" || st.Bayes != nil {
 		t.Fatalf("got %#v %v", st, err)
 	}
 
@@ -370,7 +451,7 @@ func TestLearnQueue(t *testing.T) {
 		learned <- r.URL.Path + " " + string(buf)
 	}))
 	defer srv.Close()
-	conf := config.Rspamd{URL: srv.URL}
+	conf := config.Rspamd{ControllerURL: srv.URL}
 	log := mlog.New("rspamd", nil)
 
 	cc := &closeCounter{Reader: strings.NewReader(testMsg)}
@@ -432,7 +513,7 @@ func TestLearnResults(t *testing.T) {
 	}))
 	defer srv.Close()
 	log := mlog.New("rspamd", nil)
-	conf := config.Rspamd{URL: srv.URL}
+	conf := config.Rspamd{ControllerURL: srv.URL}
 	openMsg := func() (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(testMsg)), nil }
 
 	check := func(open func() (io.ReadCloser, error), s int, b, expResult string) {
@@ -466,7 +547,7 @@ func TestLearnResults(t *testing.T) {
 // With the queue full, a message is dropped and counted.
 func TestLearnQueueFull(t *testing.T) {
 	log := mlog.New("rspamd", nil)
-	conf := config.Rspamd{URL: "http://localhost:1"} // Never contacted.
+	conf := config.Rspamd{ControllerURL: "http://localhost:1"} // Never contacted.
 	removed := func() (io.ReadCloser, error) { return nil, fs.ErrNotExist }
 	base := learnCount(t, learnDropped)
 

@@ -375,10 +375,18 @@ const index = async () => {
 			const name = b.Name === 'bayes' ? 'Bayes' : 'Bayes classifier ' + b.Name
 			return [' - ', box(yellow, name + ' in training' + (b.PerUser ? ', all users' : '') + ': spam ' + count(b.Spam) + ', ham ' + count(b.Ham))]
 		})
+		// rspamd treats a check with a Password header as a manual test and skips
+		// modules such as greylisting for it. Shown whatever rspamd's state, as it
+		// follows from the configuration, on its own line below the status.
+		const checksWithPassword = s.ChecksWithPassword ? [box(red, 'Checks are sent to the controller with the password, so rspamd treats them as manual tests and skips greylisting, rate limits, neural network and reputation for them. Set CheckURL in ' + productName(moxversion) + '.conf to rspamd\'s normal worker, e.g. http://localhost:11333.')] : []
+		// Checks go to CheckURL; if rspamd does not answer there, mox's own checks decide.
+		const checkError = s.CheckError ? [box(red, 'Checks: rspamd not reachable at CheckURL: ' + s.CheckError)] : []
 		// On the same line as the status, e.g. "Rspamd (version 4.3.0, training queue 0) -
 		// Bayes in training: spam 13 of 200 (187 remaining), ham ready", the training
-		// part highlighted like the page's other warnings.
-		dom._kids(rspamdElem, link(s.URL, 'Rspamd'), ' (', status, ')', training, dom.br())
+		// part highlighted like the page's other warnings. A box ends with its own line
+		// break, so the line only gets one when there is no training part, and the
+		// warning follows right below.
+		dom._kids(rspamdElem, link(s.URL, 'Rspamd'), ' (', status, ')', training, training.length ? [] : dom.br(), checksWithPassword, checkError)
 	})()
 
 	return dom.div(

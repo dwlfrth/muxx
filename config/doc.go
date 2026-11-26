@@ -862,34 +862,49 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 	# delivery. rspamd's greylisting and rate limits need a Redis server configured in
 	# rspamd, and its Bayes classifier, also with per-user statistics, uses Redis as
 	# its default backend. The admin web interface shows the status of rspamd with a
-	# link to its web interface at URL, and, while a Bayes classifier of rspamd has
-	# learned fewer messages of a class than its min_learns, below which rspamd does
-	# not use it, how many it has learned (for all users together if it has per_user).
-	# Metrics are named mox_rspamd_* (muxx_rspamd_* in muxx builds). (optional)
+	# link to its web interface at ControllerURL, a warning if checks are sent with a
+	# Password (see CheckURL) or if rspamd does not answer at CheckURL, and, while a
+	# Bayes classifier of rspamd has learned fewer messages of a class than its
+	# min_learns, below which rspamd does not use it, how many it has learned (for all
+	# users together if it has per_user). Metrics are named mox_rspamd_*
+	# (muxx_rspamd_* in muxx builds). (optional)
 	Rspamd:
 
-		# Base URL of the rspamd controller, e.g. http://localhost:11334: checks use
-		# /checkv3 and training /learnspam and /learnham, both served by the controller.
-		# rspamd's documentation lists /checkv3 only for the normal worker and the proxy,
-		# but the controller serves it since rspamd 4.1.1; with an older controller, mox
-		# logs that rspamd is too old and its own checks decide. Must be http or https,
-		# without credentials or query string. Across an untrusted network, use https
-		# (served natively by the controller since rspamd 4.0): it is the only option that
-		# protects the messages and the password. On the same machine or a trusted
-		# network, http is fine, with the controller's secure_ip listing mox's IP, or a
-		# Password. secure_ip encrypts nothing. Requests go through a proxy if mox's
-		# environment sets one (HTTP_PROXY, HTTPS_PROXY, NO_PROXY), except to loopback
-		# addresses; a proxy sees the password and messages unless the URL is https. The
-		# admin web interface links to this URL for rspamd's own web interface, so it
-		# should be reachable from the browser for the link to work.
-		URL:
+		# Base URL of the rspamd controller, e.g. http://localhost:11334, for training
+		# (/learnspam and /learnham), status (/stat) and, without CheckURL, checks
+		# (/checkv3). The controller serves /checkv3 since rspamd 4.1.1, though rspamd's
+		# documentation lists it only for the normal worker and the proxy; with an older
+		# controller, mox logs that rspamd is too old and its own checks decide. Must be
+		# http or https, without credentials, query string or fragment. Across an
+		# untrusted network, use https (served natively by the controller since rspamd
+		# 4.0): it is the only option that protects the messages and the password. On the
+		# same machine or a trusted network, http is fine, with the controller's secure_ip
+		# listing mox's IP, or a Password. secure_ip encrypts nothing. Requests go through
+		# a proxy if mox's environment sets one (HTTP_PROXY, HTTPS_PROXY, NO_PROXY),
+		# except to loopback addresses; a proxy sees the password and messages unless the
+		# URL is https. The admin web interface links to this URL for rspamd's own web
+		# interface, so it should be reachable from the browser for the link to work.
+		ControllerURL:
 
-		# Password for the rspamd controller, sent as Password header with checks and
-		# status requests. rspamd's controller has two passwords: password, for read-only
-		# commands such as checks, and enable_password, for privileged commands such as
-		# training. If the controller has only one of them set, it is used for both, and
-		# this one field is enough. Not needed if the controller's secure_ip lists mox's
-		# IP. (optional)
+		# Base URL of rspamd's normal worker, e.g. http://localhost:11333, for checks
+		# (/checkv3), which are then sent without password. Needed with a Password: rspamd
+		# treats any request with a Password header as a manual test, not as mail, and
+		# then skips several of its modules, e.g. greylisting (which then never remembers
+		# a message, so the sender is refused until it gives up), rate limits, the neural
+		# network and reputation. Without CheckURL and with a Password, mox logs a warning
+		# at startup and the admin web interface shows one. The normal worker has no
+		# password: limit who can reach it, e.g. by its bind_socket or a firewall. The
+		# same rules as for ControllerURL apply. rspamd's proxy worker is not an
+		# alternative by default: it only speaks milter. (optional)
+		CheckURL:
+
+		# Password for the rspamd controller, sent as Password header with status
+		# requests, and with checks if CheckURL is not set, which makes rspamd skip
+		# modules such as greylisting for them (see CheckURL). rspamd's controller has two
+		# passwords: password, for read-only commands such as checks, and enable_password,
+		# for privileged commands such as training. If the controller has only one of them
+		# set, it is used for both, and this one field is enough. Not needed if the
+		# controller's secure_ip lists mox's IP. (optional)
 		Password:
 
 		# The controller's enable_password, sent as Password header with training

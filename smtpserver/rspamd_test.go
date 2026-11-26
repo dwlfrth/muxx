@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/mjl-/bstore"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/mjl-/mox/config"
 	"github.com/mjl-/mox/dns"
@@ -125,8 +126,37 @@ func TestRspamd(t *testing.T) {
 	fake := &fakeRspamd{status: http.StatusOK, result: verdict("no action", false)}
 	srv := httptest.NewServer(fake)
 	defer srv.Close()
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: srv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
+
+	// checkTotal returns the mox_rspamd_check_total counter for a result, as served
+	// on /metrics.
+	rspamd.Register()
+	checkTotal := func(result string) float64 {
+		t.Helper()
+		mfs, err := prometheus.DefaultGatherer.Gather()
+		tcheck(t, err, "gather metrics")
+		for _, mf := range mfs {
+			if mf.GetName() != "mox_rspamd_check_total" {
+				continue
+			}
+			for _, m := range mf.GetMetric() {
+				for _, lp := range m.GetLabel() {
+					if lp.GetName() == "result" && lp.GetValue() == result {
+						return m.GetCounter().GetValue()
+					}
+				}
+			}
+		}
+		return 0
+	}
+	// expCheckTotal checks the counter for result went up by delta since before.
+	expCheckTotal := func(result string, before, delta float64) {
+		t.Helper()
+		if got := checkTotal(result) - before; got != delta {
+			t.Fatalf("mox_rspamd_check_total{result=%q} went up by %v, expected %v", result, got, delta)
+		}
+	}
 
 	var msgCount int
 	message := func(from string) string {
@@ -180,7 +210,9 @@ func TestRspamd(t *testing.T) {
 	}
 
 	// "no action" delivers to the normal mailbox, with the delivered address as user.
+	noAction0 := checkTotal("no action")
 	tcheck(t, deliver(), "deliver")
+	expCheckTotal("no action", noAction0, 1)
 	ts.checkCount("Inbox", 1)
 	expReason("Inbox", "rspamd: action no action")
 	if fake.deliverTo[len(fake.deliverTo)-1] != "mjl@mox.example" || fake.rcpts[len(fake.rcpts)-1] != "mjl@mox.example" {
@@ -214,6 +246,7 @@ func TestRspamd(t *testing.T) {
 	origLimit := rspamdChecksLimit
 	rspamdChecksLimit = 0
 	n0 = fake.count()
+	reused0 := checkTotal(rspamd.ResultReused)
 	ts.run(func(client *smtpclient.Client) {
 		msg := message("remote@example.org")
 		_, err := client.DeliverMultiple(ctxbg, "remote@example.org", []string{"mjl@mox.example", "móx@mox.example"}, int64(len(msg)), strings.NewReader(msg), true, true, false)
@@ -240,6 +273,7 @@ func TestRspamd(t *testing.T) {
 	if nreused != 1 {
 		t.Fatalf("%d copies with reused result, expected 1", nreused)
 	}
+	expCheckTotal(rspamd.ResultReused, reused0, 1)
 	ts.checkCount("Inbox", 7)
 
 	// Junk verdicts go to the Junk mailbox, with $Junk, message unchanged.
@@ -256,11 +290,17 @@ func TestRspamd(t *testing.T) {
 
 	// Rejects: permanent and temporary.
 	fake.set(http.StatusOK, verdict("reject", false))
+	reject0 := checkTotal("reject")
 	expErr(deliver(), true, smtp.C550MailboxUnavail, smtp.SePol7DeliveryUnauth1)
+	expCheckTotal("reject", reject0, 1)
 	fake.set(http.StatusOK, verdict("greylist", false))
+	greylist0 := checkTotal("greylist")
 	expErr(deliver(), false, smtp.C450MailboxUnavail, smtp.SePol7Other0)
+	expCheckTotal("greylist", greylist0, 1)
 	fake.set(http.StatusOK, verdict("soft reject", false))
+	softReject0 := checkTotal("soft reject")
 	expErr(deliver(), false, smtp.C450MailboxUnavail, smtp.SePol7Other0)
+	expCheckTotal("soft reject", softReject0, 1)
 
 	// A skip with a verdict, e.g. GTUBE, is applied.
 	fake.set(http.StatusOK, verdict("reject", true))
@@ -278,10 +318,12 @@ func TestRspamd(t *testing.T) {
 	} {
 		fake.set(tc.status, tc.result)
 		n := fake.count()
+		fallback0 := checkTotal(rspamd.ResultFallback)
 		tcheck(t, deliver(), "deliver")
 		if fake.count() != n+1 {
 			t.Fatalf("rspamd not consulted")
 		}
+		expCheckTotal(rspamd.ResultFallback, fallback0, 1)
 		expReason("Inbox", tc.check)
 		expReason("Inbox", "mox's own checks decide")
 		// Details of errors talking to rspamd, such as its URL, are only in the log.
@@ -536,7 +578,7 @@ func TestRspamdSubjectpass(t *testing.T) {
 	fake := &fakeRspamd{status: http.StatusOK, result: verdict("reject", false)}
 	srv := httptest.NewServer(fake)
 	defer srv.Close()
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: srv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 
 	deliver := func(msg string) error {
@@ -597,7 +639,7 @@ func TestRspamdHeloIPLiteral(t *testing.T) {
 	fake := &fakeRspamd{status: http.StatusOK, result: verdict("no action", false)}
 	srv := httptest.NewServer(fake)
 	defer srv.Close()
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: srv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 
 	ts.runRaw(func(conn net.Conn) {
@@ -655,7 +697,7 @@ func TestRspamdTrainingWeb(t *testing.T) {
 		w.Write([]byte(`{"success":true}`))
 	}))
 	defer srv.Close()
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: srv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 
 	dom := mox.Conf.Dynamic.Domains["mox.example"]

@@ -15,7 +15,7 @@ func TestRspamdLearn(t *testing.T) {
 	if _, ok := RspamdLearnFlags(m, Flags{}, Flags{Junk: true}); ok {
 		t.Fatalf("training without rspamd configured")
 	}
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: "http://localhost:11334"}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: "http://localhost:11334"}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 
 	flags := func(oflags, nflags Flags, expLearn, expSpam bool) {
@@ -61,7 +61,7 @@ func TestRspamdJunkFlagsForMailboxMove(t *testing.T) {
 	// Without rspamd: as mox, neutral clears.
 	move(junk, inbox, false, false)
 
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: "http://localhost:11334"}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: "http://localhost:11334"}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 	move(junk, inbox, false, true)
 	move(junk, trash, false, false)

@@ -2318,10 +2318,19 @@ func (Admin) CheckUpdatesEnabled(ctx context.Context) bool {
 // RspamdStatus is the status of rspamd, for the admin index page.
 type RspamdStatus struct {
 	Configured bool   // Whether rspamd is configured in mox.conf. Other fields are only set if configured.
-	URL        string // Configured URL of the rspamd controller, which serves its web interface.
+	URL        string // Configured ControllerURL of the rspamd controller, which serves its web interface.
 	Version    string // Version of rspamd, empty if not reachable or not in its answer.
 	TooOld     bool   // Whether the version is older than MinVersion.
 	MinVersion string
+
+	// Checks go to the controller with a Password because CheckURL is not set, so
+	// rspamd treats them as manual tests and skips modules such as greylisting.
+	ChecksWithPassword bool
+
+	// If CheckURL is set and rspamd does not answer there, checks fail and mox's own
+	// checks decide, while the controller can still be fine.
+	CheckError string
+
 	Error      string // If rspamd is not reachable.
 	LearnQueue int    // Messages waiting to be sent for training.
 	Bayes      []RspamdBayes
@@ -2344,7 +2353,18 @@ func (Admin) RspamdStatus(ctx context.Context) (s RspamdStatus) {
 	if conf == nil {
 		return
 	}
-	s = RspamdStatus{Configured: true, URL: conf.URL, MinVersion: rspamd.MinVersion, LearnQueue: rspamd.LearnQueueLength()}
+	s = RspamdStatus{
+		Configured:         true,
+		URL:                conf.ControllerURL,
+		MinVersion:         rspamd.MinVersion,
+		ChecksWithPassword: conf.ChecksWithPassword(),
+		LearnQueue:         rspamd.LearnQueueLength(),
+	}
+	if conf.CheckURL != "" {
+		if err := rspamd.Ping(ctx, *conf, conf.CheckURL); err != nil {
+			s.CheckError = err.Error()
+		}
+	}
 	st, err := rspamd.GetStat(ctx, *conf)
 	if err != nil {
 		s.Error = err.Error()
