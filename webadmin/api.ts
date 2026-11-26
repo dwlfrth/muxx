@@ -895,7 +895,7 @@ export interface HookRetired {
 // RspamdStatus is the status of rspamd, for the admin index page.
 export interface RspamdStatus {
 	Configured: boolean  // Whether rspamd is configured in mox.conf. Other fields are only set if configured.
-	URL: string  // Configured URL of the rspamd controller, which serves its web interface.
+	URL: string  // Configured ControllerURL of the rspamd controller, which serves its web interface.
 	Version: string  // Version of rspamd, empty if not reachable or not in its answer.
 	TooOld: boolean  // Whether the version is older than MinVersion.
 	MinVersion: string

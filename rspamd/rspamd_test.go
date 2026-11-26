@@ -86,7 +86,7 @@ func TestCheck(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	conf := config.Rspamd{URL: srv.URL + "/", Password: "secret"}
+	conf := config.Rspamd{ControllerURL: srv.URL + "/", Password: "secret"}
 	req := Request{
 		IP:        net.ParseIP("192.0.2.1"),
 		Helo:      "mail.example.org",
@@ -154,7 +154,7 @@ func TestCheckErrors(t *testing.T) {
 		w.Write([]byte(body))
 	}))
 	defer srv.Close()
-	conf := config.Rspamd{URL: srv.URL}
+	conf := config.Rspamd{ControllerURL: srv.URL}
 	req := Request{IP: net.ParseIP("192.0.2.1")}
 
 	check := func(s int, ct, b string, expErr error, expText string) {
@@ -187,7 +187,7 @@ func TestRedirectRefused(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	conf := config.Rspamd{URL: srv.URL, Password: "secret"}
+	conf := config.Rspamd{ControllerURL: srv.URL, Password: "secret"}
 	_, err := Check(context.Background(), conf, Request{IP: net.ParseIP("192.0.2.1")}, strings.NewReader(testMsg))
 	if err == nil || !strings.Contains(err.Error(), "refusing redirect") {
 		t.Fatalf("got %v, expected redirect refused", err)
@@ -207,7 +207,7 @@ func TestTLSCertPool(t *testing.T) {
 		w.Write([]byte(`{"version":"4.3.0"}`))
 	}))
 	defer srv.Close()
-	conf := config.Rspamd{URL: srv.URL}
+	conf := config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.TLS.CertPool = nil }()
 
 	// Not trusted by the system's certificate authorities.
@@ -249,9 +249,9 @@ func TestPasswords(t *testing.T) {
 			t.Fatalf("passwords sent %v, expected %v", got, exp)
 		}
 	}
-	check(config.Rspamd{URL: srv.URL, Password: "readonly", EnablePassword: "enable"}, "readonly", "enable")
-	check(config.Rspamd{URL: srv.URL, Password: "both"}, "both", "both")
-	check(config.Rspamd{URL: srv.URL}, "", "")
+	check(config.Rspamd{ControllerURL: srv.URL, Password: "readonly", EnablePassword: "enable"}, "readonly", "enable")
+	check(config.Rspamd{ControllerURL: srv.URL, Password: "both"}, "both", "both")
+	check(config.Rspamd{ControllerURL: srv.URL}, "", "")
 }
 
 func TestTimeout(t *testing.T) {
@@ -259,7 +259,7 @@ func TestTimeout(t *testing.T) {
 		time.Sleep(time.Second)
 	}))
 	defer srv.Close()
-	conf := config.Rspamd{URL: srv.URL, Timeout: 50 * time.Millisecond}
+	conf := config.Rspamd{ControllerURL: srv.URL, Timeout: 50 * time.Millisecond}
 	t0 := time.Now()
 	_, err := Check(context.Background(), conf, Request{IP: net.ParseIP("192.0.2.1")}, strings.NewReader(testMsg))
 	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
@@ -281,7 +281,7 @@ func TestLearn(t *testing.T) {
 		w.Write([]byte(body))
 	}))
 	defer srv.Close()
-	conf := config.Rspamd{URL: srv.URL}
+	conf := config.Rspamd{ControllerURL: srv.URL}
 
 	learn := func(spam bool, s int, b string, expErr error, expPath string) {
 		t.Helper()
@@ -326,7 +326,7 @@ func TestStat(t *testing.T) {
 		w.Write([]byte(stat))
 	}))
 	defer srv.Close()
-	st, err := GetStat(context.Background(), config.Rspamd{URL: srv.URL})
+	st, err := GetStat(context.Background(), config.Rspamd{ControllerURL: srv.URL})
 	exp := Stat{Version: "4.3.0", Bayes: []Bayes{
 		{Name: "bayes", MinLearns: 200, Spam: 12, Ham: 548},
 		{Name: "old", PerUser: true, MinLearns: 10, Spam: 3, Ham: 4},
@@ -337,7 +337,7 @@ func TestStat(t *testing.T) {
 
 	// Without statistics, as from rspamd without a classifier: only the version.
 	stat = `{"version":"4.3.0"}`
-	if st, err := GetStat(context.Background(), config.Rspamd{URL: srv.URL}); err != nil || st.Version != "4.3.0" || st.Bayes != nil {
+	if st, err := GetStat(context.Background(), config.Rspamd{ControllerURL: srv.URL}); err != nil || st.Version != "4.3.0" || st.Bayes != nil {
 		t.Fatalf("got %#v %v", st, err)
 	}
 
@@ -370,7 +370,7 @@ func TestLearnQueue(t *testing.T) {
 		learned <- r.URL.Path + " " + string(buf)
 	}))
 	defer srv.Close()
-	conf := config.Rspamd{URL: srv.URL}
+	conf := config.Rspamd{ControllerURL: srv.URL}
 	log := mlog.New("rspamd", nil)
 
 	cc := &closeCounter{Reader: strings.NewReader(testMsg)}
@@ -432,7 +432,7 @@ func TestLearnResults(t *testing.T) {
 	}))
 	defer srv.Close()
 	log := mlog.New("rspamd", nil)
-	conf := config.Rspamd{URL: srv.URL}
+	conf := config.Rspamd{ControllerURL: srv.URL}
 	openMsg := func() (io.ReadCloser, error) { return io.NopCloser(strings.NewReader(testMsg)), nil }
 
 	check := func(open func() (io.ReadCloser, error), s int, b, expResult string) {
@@ -466,7 +466,7 @@ func TestLearnResults(t *testing.T) {
 // With the queue full, a message is dropped and counted.
 func TestLearnQueueFull(t *testing.T) {
 	log := mlog.New("rspamd", nil)
-	conf := config.Rspamd{URL: "http://localhost:1"} // Never contacted.
+	conf := config.Rspamd{ControllerURL: "http://localhost:1"} // Never contacted.
 	removed := func() (io.ReadCloser, error) { return nil, fs.ErrNotExist }
 	base := learnCount(t, learnDropped)
 

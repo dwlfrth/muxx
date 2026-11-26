@@ -387,7 +387,7 @@ func TestAPI(t *testing.T) {
 		w.Write([]byte(`{"success":true}`))
 	}))
 	defer rspamdSrv.Close()
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: rspamdSrv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: rspamdSrv.URL}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 
 	// Reply with attachments.

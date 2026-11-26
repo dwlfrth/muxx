@@ -635,19 +635,19 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 	if r := c.Rspamd; r != nil {
 		// Credentials or a query string in the URL could end up in logs and errors, so
 		// the password has its own field.
-		if u, err := url.Parse(r.URL); err != nil {
+		if u, err := url.Parse(r.ControllerURL); err != nil {
 			// Not the url.Error itself: it includes the url, which is not validated yet.
 			var uerr *url.Error
 			if errors.As(err, &uerr) {
 				err = uerr.Err
 			}
-			addErrorf("rspamd: parsing url: %v", err)
+			addErrorf("rspamd: parsing controller url: %v", err)
 		} else if u.Scheme != "http" && u.Scheme != "https" || u.Host == "" {
-			addErrorf("rspamd: url must be http or https with a host")
-		} else if u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(r.URL, "#") {
+			addErrorf("rspamd: controller url must be http or https with a host")
+		} else if u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(r.ControllerURL, "#") {
 			// Also an empty fragment: the path for a request is appended to the URL, and
 			// would end up in the fragment.
-			addErrorf("rspamd: url must not have credentials, query string or fragment, the password has its own field")
+			addErrorf("rspamd: controller url must not have credentials, query string or fragment, the password has its own field")
 		}
 		// Not quoted in errors, they are secret. Control characters can't be sent in a
 		// header.

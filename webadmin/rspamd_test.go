@@ -35,7 +35,7 @@ func TestRspamdStatus(t *testing.T) {
 		t.Fatalf("status without rspamd configured: %#v", s)
 	}
 
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: srv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 	s := Admin{}.RspamdStatus(ctxbg)
 	exp := RspamdStatus{Configured: true, URL: srv.URL, Version: "4.3.0", MinVersion: rspamd.MinVersion}
 	if !reflect.DeepEqual(s, exp) {

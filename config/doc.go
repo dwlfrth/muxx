@@ -862,10 +862,11 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 	# delivery. rspamd's greylisting and rate limits need a Redis server configured in
 	# rspamd, and its Bayes classifier, also with per-user statistics, uses Redis as
 	# its default backend. The admin web interface shows the status of rspamd with a
-	# link to its web interface at URL, and, while a Bayes classifier of rspamd has
-	# learned fewer messages of a class than its min_learns, below which rspamd does
-	# not use it, how many it has learned (for all users together if it has per_user).
-	# Metrics are named mox_rspamd_* (muxx_rspamd_* in muxx builds). (optional)
+	# link to its web interface at ControllerURL, and, while a Bayes classifier of
+	# rspamd has learned fewer messages of a class than its min_learns, below which
+	# rspamd does not use it, how many it has learned (for all users together if it
+	# has per_user). Metrics are named mox_rspamd_* (muxx_rspamd_* in muxx builds).
+	# (optional)
 	Rspamd:
 
 		# Base URL of the rspamd controller, e.g. http://localhost:11334: checks use
@@ -882,7 +883,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 		# addresses; a proxy sees the password and messages unless the URL is https. The
 		# admin web interface links to this URL for rspamd's own web interface, so it
 		# should be reachable from the browser for the link to work.
-		URL:
+		ControllerURL:
 
 		# Password for the rspamd controller, sent as Password header with checks and
 		# status requests. rspamd's controller has two passwords: password, for read-only

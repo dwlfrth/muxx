@@ -378,7 +378,7 @@ func do(ctx context.Context, conf config.Rspamd, password, method, path string, 
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 
-	req, err := http.NewRequestWithContext(ctx, method, strings.TrimSuffix(conf.URL, "/")+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimSuffix(conf.ControllerURL, "/")+path, body)
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("rspamd: new request: %v", err)

@@ -207,14 +207,14 @@ In `mox.conf`:
 
 ```
 Rspamd:
-	URL: http://localhost:11334
+	ControllerURL: http://localhost:11334
 	Password: read-only-password
 	EnablePassword: enable-password
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
-| `URL` | required | Base URL of rspamd's controller. Checks and training both go to the controller. http or https, without credentials, query string or fragment. Also linked from the admin page as rspamd's web interface, so it should be reachable from the admin's browser for that link to work. |
+| `ControllerURL` | required | Base URL of rspamd's controller. Checks and training both go to the controller. http or https, without credentials, query string or fragment. Also linked from the admin page as rspamd's web interface, so it should be reachable from the admin's browser for that link to work. Named `URL` before 2026-11-25: a configuration with `URL` is refused until it is renamed. |
 | `Password` | empty | The controller's `password`, sent with checks and status requests. |
 | `EnablePassword` | `Password` | The controller's `enable_password`, sent with training. rspamd only accepts training with `enable_password` when that is set. |
 | `Timeout` | 16s | Per request. Twice rspamd's default `task_timeout` of 8s, after which rspamd finishes with what it has and still answers. |

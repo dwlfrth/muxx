@@ -125,7 +125,7 @@ func TestRspamd(t *testing.T) {
 	fake := &fakeRspamd{status: http.StatusOK, result: verdict("no action", false)}
 	srv := httptest.NewServer(fake)
 	defer srv.Close()
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: srv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 
 	var msgCount int
@@ -536,7 +536,7 @@ func TestRspamdSubjectpass(t *testing.T) {
 	fake := &fakeRspamd{status: http.StatusOK, result: verdict("reject", false)}
 	srv := httptest.NewServer(fake)
 	defer srv.Close()
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: srv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 
 	deliver := func(msg string) error {
@@ -597,7 +597,7 @@ func TestRspamdHeloIPLiteral(t *testing.T) {
 	fake := &fakeRspamd{status: http.StatusOK, result: verdict("no action", false)}
 	srv := httptest.NewServer(fake)
 	defer srv.Close()
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: srv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 
 	ts.runRaw(func(conn net.Conn) {
@@ -655,7 +655,7 @@ func TestRspamdTrainingWeb(t *testing.T) {
 		w.Write([]byte(`{"success":true}`))
 	}))
 	defer srv.Close()
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: srv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 
 	dom := mox.Conf.Dynamic.Domains["mox.example"]

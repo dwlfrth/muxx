@@ -53,7 +53,7 @@ func TestRspamdTraining(t *testing.T) {
 	tc.transactf("ok", "uid copy 1 Junk")
 	expect()
 
-	mox.Conf.Static.Rspamd = &config.Rspamd{URL: srv.URL}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 	defer func() { mox.Conf.Static.Rspamd = nil }()
 
 	tc.client.Append("inbox", makeAppend(exampleMsg)) // uid 2

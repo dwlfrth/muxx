@@ -6682,7 +6682,7 @@
 				},
 				{
 					"Name": "URL",
-					"Docs": "Configured URL of the rspamd controller, which serves its web interface.",
+					"Docs": "Configured ControllerURL of the rspamd controller, which serves its web interface.",
 					"Typewords": [
 						"string"
 					]
