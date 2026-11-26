@@ -6709,6 +6709,20 @@
 					]
 				},
 				{
+					"Name": "ChecksWithPassword",
+					"Docs": "Checks go to the controller with a Password because CheckURL is not set, so rspamd treats them as manual tests and skips modules such as greylisting.",
+					"Typewords": [
+						"bool"
+					]
+				},
+				{
+					"Name": "CheckError",
+					"Docs": "If CheckURL is set and rspamd does not answer there, checks fail and mox's own checks decide, while the controller can still be fine.",
+					"Typewords": [
+						"string"
+					]
+				},
+				{
 					"Name": "Error",
 					"Docs": "If rspamd is not reachable.",
 					"Typewords": [

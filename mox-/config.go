@@ -633,21 +633,31 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 	}
 
 	if r := c.Rspamd; r != nil {
-		// Credentials or a query string in the URL could end up in logs and errors, so
+		// Credentials or a query string in a URL could end up in logs and errors, so
 		// the password has its own field.
-		if u, err := url.Parse(r.ControllerURL); err != nil {
-			// Not the url.Error itself: it includes the url, which is not validated yet.
-			var uerr *url.Error
-			if errors.As(err, &uerr) {
-				err = uerr.Err
+		checkURL := func(name, s string) {
+			if u, err := url.Parse(s); err != nil {
+				// Not the url.Error itself: it includes the url, which is not validated yet.
+				var uerr *url.Error
+				if errors.As(err, &uerr) {
+					err = uerr.Err
+				}
+				addErrorf("rspamd: parsing %s: %v", name, err)
+			} else if u.Scheme != "http" && u.Scheme != "https" || u.Host == "" {
+				addErrorf("rspamd: %s must be http or https with a host", name)
+			} else if u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(s, "#") {
+				// Also an empty fragment: the path for a request is appended to the URL, and
+				// would end up in the fragment.
+				addErrorf("rspamd: %s must not have credentials, query string or fragment, the password has its own field", name)
 			}
-			addErrorf("rspamd: parsing controller url: %v", err)
-		} else if u.Scheme != "http" && u.Scheme != "https" || u.Host == "" {
-			addErrorf("rspamd: controller url must be http or https with a host")
-		} else if u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(r.ControllerURL, "#") {
-			// Also an empty fragment: the path for a request is appended to the URL, and
-			// would end up in the fragment.
-			addErrorf("rspamd: controller url must not have credentials, query string or fragment, the password has its own field")
+		}
+		checkURL("controller url", r.ControllerURL)
+		if r.CheckURL != "" {
+			checkURL("check url", r.CheckURL)
+		}
+		if r.ChecksWithPassword() {
+			// The admin web interface shows this too.
+			log.Warn("rspamd: checks are sent to the controller with a password, so rspamd treats them as manual tests and skips modules such as greylisting, rate limits, neural network and reputation for them; set CheckURL to rspamd's normal worker, e.g. http://localhost:11333")
 		}
 		// Not quoted in errors, they are secret. Control characters can't be sent in a
 		// header.
@@ -656,6 +666,14 @@ func PrepareStaticConfig(ctx context.Context, log mlog.Log, configFile string, c
 		}
 		if strings.ContainsFunc(r.EnablePassword, unicode.IsControl) {
 			addErrorf("rspamd: enable password must not contain control characters")
+		}
+		// HTTP removes spaces at the start and end of a header value, so rspamd would get
+		// another password.
+		if strings.HasPrefix(r.Password, " ") || strings.HasSuffix(r.Password, " ") {
+			addErrorf("rspamd: password must not start or end with a space")
+		}
+		if strings.HasPrefix(r.EnablePassword, " ") || strings.HasSuffix(r.EnablePassword, " ") {
+			addErrorf("rspamd: enable password must not start or end with a space")
 		}
 		if r.Timeout < 0 {
 			addErrorf("rspamd: timeout must not be negative")

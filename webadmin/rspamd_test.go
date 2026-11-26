@@ -22,6 +22,10 @@ func TestRspamdStatus(t *testing.T) {
 	version := "4.3.0"
 	statfiles := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ping" {
+			w.Write([]byte("pong\r\n"))
+			return
+		}
 		if r.URL.Path != "/stat" {
 			http.NotFound(w, r)
 			return
@@ -54,6 +58,27 @@ func TestRspamdStatus(t *testing.T) {
 	if s := (Admin{}).RspamdStatus(ctxbg); !s.TooOld || s.Version != "4.1.0" || s.Error != "" {
 		t.Fatalf("status for old rspamd: %#v", s)
 	}
+
+	// With a password and no CheckURL, checks go to the controller with the
+	// password, which the admin page warns about. With CheckURL, checks go to the
+	// normal worker.
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL, Password: "secret"}
+	if s := (Admin{}).RspamdStatus(ctxbg); !s.ChecksWithPassword || s.MinVersion != rspamd.MinVersion {
+		t.Fatalf("status with password without check url: %#v", s)
+	}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL, CheckURL: srv.URL, Password: "secret"}
+	if s := (Admin{}).RspamdStatus(ctxbg); s.ChecksWithPassword || s.CheckError != "" {
+		t.Fatalf("status with check url: %#v", s)
+	}
+
+	// rspamd not answering at CheckURL: checks fail while the controller is fine.
+	down := httptest.NewServer(http.NotFoundHandler())
+	down.Close()
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL, CheckURL: down.URL, Password: "secret"}
+	if s := (Admin{}).RspamdStatus(ctxbg); s.CheckError == "" || s.Error != "" || s.Version == "" {
+		t.Fatalf("status with unreachable check url: %#v", s)
+	}
+	mox.Conf.Static.Rspamd = &config.Rspamd{ControllerURL: srv.URL}
 
 	// No version in the answer: unknown, not too old.
 	version = ""

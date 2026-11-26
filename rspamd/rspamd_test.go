@@ -254,6 +254,87 @@ func TestPasswords(t *testing.T) {
 	check(config.Rspamd{ControllerURL: srv.URL}, "", "")
 }
 
+// Ping checks that rspamd answers "pong" on /ping, without password.
+func TestPing(t *testing.T) {
+	var status int
+	var body, gotPassword string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPassword = r.Header.Get("Password")
+		if r.URL.Path != "/ping" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(status)
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	conf := config.Rspamd{ControllerURL: srv.URL, CheckURL: srv.URL + "/", Password: "secret"}
+
+	status, body = http.StatusOK, "pong\r\n"
+	if err := Ping(context.Background(), conf, conf.CheckURL); err != nil || gotPassword != "" {
+		t.Fatalf("ping: %v, password %q", err, gotPassword)
+	}
+	status, body = http.StatusOK, "not rspamd"
+	if err := Ping(context.Background(), conf, conf.CheckURL); err == nil {
+		t.Fatalf("ping with other answer succeeded")
+	}
+	status, body = http.StatusInternalServerError, ""
+	if err := Ping(context.Background(), conf, conf.CheckURL); err == nil || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("ping with error status: %v", err)
+	}
+	srv.Close()
+	if err := Ping(context.Background(), conf, conf.CheckURL); err == nil {
+		t.Fatalf("ping to closed server succeeded")
+	}
+}
+
+// With CheckURL, checks go to the normal worker without a Password header: rspamd
+// treats a request with one as a manual test and skips modules such as greylisting
+// for it. Training and status stay on the controller, with the passwords.
+func TestCheckURL(t *testing.T) {
+	var mu sync.Mutex
+	got := map[string]string{} // "server path" to the Password header, "-" if absent.
+	server := func(name string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			io.Copy(io.Discard, r.Body)
+			pw := "-"
+			if v, ok := r.Header["Password"]; ok {
+				pw = strings.Join(v, ",")
+			}
+			mu.Lock()
+			got[name+" "+r.URL.Path] = pw
+			mu.Unlock()
+			if r.URL.Path == "/checkv3" {
+				writeV3Result(w, `{"action":"no action"}`, false)
+				return
+			}
+			http.Error(w, "test", http.StatusInternalServerError)
+		}))
+	}
+	controller := server("controller")
+	defer controller.Close()
+	worker := server("worker")
+	defer worker.Close()
+
+	conf := config.Rspamd{ControllerURL: controller.URL, CheckURL: worker.URL + "/", Password: "readonly", EnablePassword: "enable"}
+	if _, err := Check(context.Background(), conf, Request{IP: net.ParseIP("192.0.2.1")}, strings.NewReader(testMsg)); err != nil {
+		t.Fatalf("check: %v", err)
+	}
+	GetStat(context.Background(), conf)
+	Learn(context.Background(), conf, true, "", strings.NewReader(testMsg))
+	Learn(context.Background(), conf, false, "", strings.NewReader(testMsg))
+	exp := map[string]string{
+		"worker /checkv3":       "-",
+		"controller /stat":      "readonly",
+		"controller /learnspam": "enable",
+		"controller /learnham":  "enable",
+	}
+	if !maps.Equal(got, exp) {
+		t.Fatalf("requests with password %v, expected %v", got, exp)
+	}
+
+}
+
 func TestTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(time.Second)
