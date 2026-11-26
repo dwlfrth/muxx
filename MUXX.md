@@ -5,6 +5,24 @@ server by Mechiel Lukkien, with additional features. Everything else is
 upstream mox, unchanged: its documentation, configuration and behaviour apply
 as they are. See [README.md](README.md).
 
+## Features
+
+Each feature is off unless configured. The release linked is the first that
+has the feature, and its release note has the details; the newest feature
+links the latest release.
+
+| Feature | Setting | Release |
+|---|---|---|
+| Send-only domains: a domain that only sends email through this server, and never receives it here | `SendOnly` in a domain in `domains.conf` | [muxx-202611210226](https://github.com/dwlfrth/muxx/releases/tag/muxx-202611210226) |
+| Leave the server's own private IP address out of the Received header | `HidePrivateReceivedIP` in `muxx.conf` | [muxx-202611211643](https://github.com/dwlfrth/muxx/releases/tag/muxx-202611211643) |
+| Spam filtering and training with rspamd, see [rspamd/README.md](rspamd/README.md) | `Rspamd` section in `muxx.conf` | [muxx-202611232229](https://github.com/dwlfrth/muxx/releases/tag/muxx-202611232229) |
+| rspamd checks without password, so rspamd's greylisting, rate limits, neural network and reputation apply | `CheckURL` in the `Rspamd` section | [latest](https://github.com/dwlfrth/muxx/releases/latest) |
+
+Every release, since the first,
+[muxx-202611201932](https://github.com/dwlfrth/muxx/releases/tag/muxx-202611201932),
+presents itself as muxx (see "Relation to mox") and is published as a
+container image (see "Image").
+
 ## The name
 
 muxx keeps its roots in mox: the same letters, one vowel apart, and the
